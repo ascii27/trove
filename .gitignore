@@ -1,0 +1,17 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+*.egg-info/
+
+# Node / frontend
+node_modules/
+dist/
+coverage/
+
+# Local data & secrets
+*.db
+*.db-wal
+*.db-shm
+.env
