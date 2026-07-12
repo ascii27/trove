@@ -276,6 +276,77 @@ body {
   color: var(--ink-faint);
   font-size: 12.5px;
 }
+.list-head h2 .lens-term {
+  color: var(--accent);
+  font-style: italic;
+}
+
+/* ---- lens (search) bar ---- */
+.lens-bar {
+  position: relative;
+  display: flex;
+  align-items: center;
+  margin-bottom: 12px;
+}
+.lens-bar svg {
+  position: absolute;
+  left: 11px;
+  color: var(--ink-faint);
+  pointer-events: none;
+}
+.lens-bar input {
+  width: 100%;
+  font: inherit;
+  font-size: 13.5px;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 9px 30px 9px 34px;
+  outline: none;
+}
+.lens-bar input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+.lens-bar input::placeholder {
+  color: var(--ink-faint);
+}
+.lens-clear {
+  position: absolute;
+  right: 8px;
+  border: none;
+  background: none;
+  color: var(--ink-faint);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 2px 6px;
+}
+.lens-clear:hover {
+  color: var(--ink);
+}
+.nav-search {
+  margin-bottom: 2px;
+}
+
+/* cross-lane origin tags on lens results */
+.lane-tag {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  border-radius: 4px;
+  padding: 1px 6px;
+}
+.lane-saved {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.lane-feed {
+  background: #efede8;
+  color: var(--ink-soft);
+}
 .notice {
   margin-top: 10px;
   font-size: 12.5px;
@@ -678,6 +749,11 @@ body {
   border-radius: 20px;
   padding: 2px 9px;
   color: var(--ink-soft);
+}
+.tags span.hit {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
 }
 .claims {
   margin: 6px 0 0;

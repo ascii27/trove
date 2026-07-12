@@ -53,6 +53,13 @@ def list_items(view: str = "all", feed_id: int | None = None) -> dict:
         }
 
 
+@router.get("/lens")
+def lens(q: str = "") -> dict:
+    with db.cursor() as conn:
+        result = store.lens_search(conn, q)
+        return {"query": q.strip(), **result}
+
+
 @router.get("/items/{item_id}")
 def get_item(item_id: int) -> dict:
     with db.cursor() as conn:

@@ -4,6 +4,7 @@ import type { ItemFull } from "../types";
 
 interface Props {
   item: ItemFull | null;
+  highlightTopics: string[];
   onMarkUnread: (id: number) => void;
   onRetry: (id: number) => void;
   onBack: () => void;
@@ -16,7 +17,7 @@ const SOURCE_LABEL: Record<string, string> = {
   analysis: "Analysis",
 };
 
-function MetaPanel({ item }: { item: ItemFull }) {
+function MetaPanel({ item, highlightTopics }: { item: ItemFull; highlightTopics: string[] }) {
   const en = item.enrichment_status;
   return (
     <aside className="side">
@@ -54,7 +55,9 @@ function MetaPanel({ item }: { item: ItemFull }) {
               <div className="k">Topics</div>
               <div className="tags">
                 {item.topics.map((t) => (
-                  <span key={t}>{t}</span>
+                  <span key={t} className={highlightTopics.includes(t) ? "hit" : ""}>
+                    {t}
+                  </span>
                 ))}
               </div>
             </div>
@@ -80,7 +83,7 @@ function MetaPanel({ item }: { item: ItemFull }) {
   );
 }
 
-export function Reader({ item, onMarkUnread, onRetry, onBack, onSave }: Props) {
+export function Reader({ item, highlightTopics, onMarkUnread, onRetry, onBack, onSave }: Props) {
   let content: ReactNode;
 
   if (!item) {
@@ -146,7 +149,7 @@ export function Reader({ item, onMarkUnread, onRetry, onBack, onSave }: Props) {
             <div className="prose" dangerouslySetInnerHTML={{ __html: renderMarkdown(item.content_text) }} />
           )}
         </article>
-        <MetaPanel item={item} />
+        <MetaPanel item={item} highlightTopics={highlightTopics} />
       </>
     );
   }

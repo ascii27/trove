@@ -15,6 +15,7 @@ vi.mock("../api", () => ({
     retry: vi.fn(),
     remove: vi.fn(),
     save: vi.fn(),
+    lens: vi.fn(),
     feeds: vi.fn(),
     addFeed: vi.fn(),
     removeFeed: vi.fn(),
@@ -83,6 +84,25 @@ describe("App", () => {
 
     await waitFor(() => expect(mockApi.remove).toHaveBeenCalledWith(5));
     await waitFor(() => expect(screen.queryByRole("button", { name: "Doomed" })).not.toBeInTheDocument());
+  });
+
+  it("runs a lens query and shows cross-lane results", async () => {
+    mockApi.list.mockResolvedValue({ items: [], unread_count: 0 });
+    mockApi.lens.mockResolvedValue({
+      query: "AI",
+      items: [summary({ id: 1, lane: "saved", title: "Saved AI piece" }), summary({ id: 2, lane: "feed", title: "Feed AI piece" })],
+      saved_count: 1,
+      feed_count: 1,
+    });
+
+    render(<App />);
+    await screen.findByText(/library is empty/i);
+
+    await userEvent.type(screen.getByLabelText(/search your library/i), "AI");
+    await waitFor(() => expect(mockApi.lens).toHaveBeenCalledWith("AI"));
+    expect(await screen.findByText(/reading about/i)).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Saved AI piece" })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Feed AI piece" })).toBeInTheDocument();
   });
 
   it("adds a feed, shows it in the nav, and opens its items", async () => {

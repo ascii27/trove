@@ -22,6 +22,7 @@ export interface ItemSummary {
   category: string | null;
   source_type: "primary" | "secondary" | "analysis" | null;
   error_message: string | null;
+  matched_topics?: string[]; // present only on lens results
 }
 
 export interface Feed {
