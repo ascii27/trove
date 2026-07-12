@@ -118,6 +118,8 @@ export default function App() {
 
   const onSearch = useCallback(() => {
     setListOpen(true);
+    setSelectedId(null); // land on the list/search screen, not a lingering reader
+    setSelected(null);
     setLensFocusTick((t) => t + 1);
   }, []);
 

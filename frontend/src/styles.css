@@ -25,6 +25,10 @@ body,
   margin: 0;
   height: 100%;
 }
+html,
+body {
+  overflow-x: hidden;
+}
 body {
   font-family: var(--sans);
   color: var(--ink);
@@ -845,12 +849,21 @@ body {
   .app.list-open .list {
     transform: translateX(0);
   }
-  /* level 3: an item is open (reader on top; list parked to the left) */
+  /* level 3: an item is open (reader on top; nav + list parked to the left) */
+  .app.reading .nav,
   .app.reading .list {
     transform: translateX(-100%);
   }
   .app.reading .reader {
     transform: translateX(0);
+  }
+
+  /* iOS zooms in when focusing an input under 16px, which then lets the page
+     pan sideways and expose the off-screen panes. Keep mobile inputs at 16px. */
+  .lens-bar input,
+  .capture input,
+  .feed-capture input {
+    font-size: 16px;
   }
 
   .card-delete {
