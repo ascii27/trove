@@ -11,6 +11,7 @@ interface Props {
   error: string | null;
   onSelect: (id: number) => void;
   onDelete: (id: number) => void;
+  onBackToNav: () => void;
 }
 
 function metaBits(i: ItemSummary): string[] {
@@ -44,7 +45,7 @@ const TrashIcon = () => (
   </svg>
 );
 
-export function List({ items, view, feedTitle, loaded, selectedId, notice, error, onSelect, onDelete }: Props) {
+export function List({ items, view, feedTitle, loaded, selectedId, notice, error, onSelect, onDelete, onBackToNav }: Props) {
   const [confirmId, setConfirmId] = useState<number | null>(null);
   const title = view === "feed" ? feedTitle ?? "Feed" : view === "unread" ? "Unread" : "All saved";
   const subtitle =
@@ -53,6 +54,9 @@ export function List({ items, view, feedTitle, loaded, selectedId, notice, error
   return (
     <section className="list">
       <div className="list-head">
+        <button className="list-back" onClick={onBackToNav} aria-label="Back to menu">
+          ← Menu
+        </button>
         <h2>{title}</h2>
         <div className="sub">{subtitle}</div>
         {notice && <div className="notice">{notice}</div>}

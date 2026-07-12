@@ -83,6 +83,8 @@ CREATE TABLE IF NOT EXISTS feeds (
 MIGRATIONS = [
     # Phase 2a: associate streamed items with their feed.
     ("items", "feed_id", "ALTER TABLE items ADD COLUMN feed_id INTEGER REFERENCES feeds(id)"),
+    # Sortable publish timestamp (ISO) so feed items list newest-first.
+    ("items", "published_at", "ALTER TABLE items ADD COLUMN published_at TEXT"),
 ]
 
 

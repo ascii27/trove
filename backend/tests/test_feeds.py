@@ -113,6 +113,20 @@ def test_delete_feed_keeps_saved_items(conn):
     assert store.get_feed(conn, feed_id) is None
 
 
+def test_feed_items_list_newest_first(conn):
+    feed_id = store.add_feed(conn, "https://ex.com/feed", None, "Ex")
+    # Insert in feed order (newest first), each with its own publish timestamp.
+    entries = [
+        Entry(title="new", link="https://ex.com/new", summary="s", published="d3", published_at="2026-07-10T00:00:00"),
+        Entry(title="mid", link="https://ex.com/mid", summary="s", published="d2", published_at="2026-07-05T00:00:00"),
+        Entry(title="old", link="https://ex.com/old", summary="s", published="d1", published_at="2026-07-01T00:00:00"),
+    ]
+    store.ingest_entries(conn, feed_id, "Ex", entries)
+    conn.commit()
+    titles = [i["title"] for i in store.list_items(conn, "feed", feed_id)]
+    assert titles == ["new", "mid", "old"]  # newest publish date first
+
+
 def test_list_feeds_unread_counts(conn):
     feed_id = store.add_feed(conn, "https://ex.com/feed", None, "Ex")
     store.ingest_entries(conn, feed_id, "Ex", _entries(3))

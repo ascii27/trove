@@ -71,14 +71,16 @@ def get_item(conn: sqlite3.Connection, item_id: int) -> dict | None:
 
 def list_items(conn: sqlite3.Connection, view: str = "all", feed_id: int | None = None) -> list[dict]:
     if view == "feed":
+        # Feed items list newest-first by the entry's own publish time (NULLs last).
         where, params = "WHERE lane = 'feed' AND feed_id = ? AND read_state != 'archived'", (feed_id,)
+        order = "ORDER BY (published_at IS NULL), published_at DESC, id DESC"
     elif view == "unread":
         where, params = "WHERE lane = 'saved' AND read_state = 'unread'", ()
+        order = "ORDER BY date_saved DESC, id DESC"
     else:  # 'all' — Saved lane only (lanes stay strictly separate)
         where, params = "WHERE lane = 'saved'", ()
-    rows = conn.execute(
-        f"SELECT {_LIST_COLS} FROM items {where} ORDER BY date_saved DESC, id DESC", params
-    ).fetchall()
+        order = "ORDER BY date_saved DESC, id DESC"
+    rows = conn.execute(f"SELECT {_LIST_COLS} FROM items {where} {order}", params).fetchall()
     return [_item_dict(r) for r in rows]
 
 
@@ -274,9 +276,9 @@ def ingest_entries(
         status = "pending" if make_eager else "deferred"
         cur = conn.execute(
             "INSERT INTO items (url_canonical, original_url, lane, feed_id, title, source, "
-            "publish_date, summary, extraction_status) "
-            "VALUES (?, ?, 'feed', ?, ?, ?, ?, ?, ?)",
-            (canon, entry.link, feed_id, entry.title, feed_title, entry.published, entry.summary, status),
+            "publish_date, published_at, summary, extraction_status) "
+            "VALUES (?, ?, 'feed', ?, ?, ?, ?, ?, ?, ?)",
+            (canon, entry.link, feed_id, entry.title, feed_title, entry.published, entry.published_at, entry.summary, status),
         )
         if make_eager:
             enqueue_job(conn, cur.lastrowid, "extract")

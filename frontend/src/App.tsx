@@ -16,6 +16,8 @@ export default function App() {
   const [unreadCount, setUnreadCount] = useState(0);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [selected, setSelected] = useState<ItemFull | null>(null);
+  // Mobile drills nav → list → reader; listOpen tracks the first step (desktop ignores it).
+  const [listOpen, setListOpen] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
@@ -174,8 +176,19 @@ export default function App() {
     setSelected(null);
   }, []);
 
+  const onBackToNav = useCallback(() => {
+    setListOpen(false);
+    setSelectedId(null);
+    setSelected(null);
+  }, []);
+
+  // onCapture opens a reader item; make sure the mobile list is "entered" too.
+  useEffect(() => {
+    if (selectedId != null) setListOpen(true);
+  }, [selectedId]);
+
   return (
-    <div className={`app${selectedId != null ? " reading" : ""}`}>
+    <div className={`app${listOpen ? " list-open" : ""}${selectedId != null ? " reading" : ""}`}>
       <Nav
         view={view}
         feedId={feedId}
@@ -185,10 +198,12 @@ export default function App() {
         onSelectSaved={(v) => {
           setView(v);
           setFeedId(null);
+          setListOpen(true);
         }}
         onSelectFeed={(id) => {
           setView("feed");
           setFeedId(id);
+          setListOpen(true);
         }}
         onAddFeed={onAddFeed}
         onDeleteFeed={onDeleteFeed}
@@ -204,6 +219,7 @@ export default function App() {
         error={error}
         onSelect={openItem}
         onDelete={onDelete}
+        onBackToNav={onBackToNav}
       />
       <Reader item={selected} onMarkUnread={onMarkUnread} onRetry={onRetry} onBack={onBack} onSave={onSave} />
     </div>

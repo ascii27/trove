@@ -6,6 +6,7 @@ the feed via <link rel="alternate">.
 """
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass, field
 
 import feedparser
@@ -29,7 +30,8 @@ class Entry:
     title: str | None
     link: str
     summary: str | None
-    published: str | None
+    published: str | None  # human-readable (as published in the feed)
+    published_at: str | None = None  # sortable ISO 8601, for newest-first ordering
 
 
 @dataclass
@@ -66,12 +68,14 @@ def parse_feed(content: str | bytes, url: str) -> ParsedFeed | None:
         summary = e.get("summary")
         if not summary and e.get("content"):
             summary = e["content"][0].get("value")
+        parsed_date = e.get("published_parsed") or e.get("updated_parsed")
         entries.append(
             Entry(
                 title=e.get("title"),
                 link=link,
                 summary=_text(summary),
                 published=e.get("published") or e.get("updated"),
+                published_at=time.strftime("%Y-%m-%dT%H:%M:%S", parsed_date) if parsed_date else None,
             )
         )
     return ParsedFeed(title=d.feed.get("title"), site_url=d.feed.get("link"), entries=entries)
