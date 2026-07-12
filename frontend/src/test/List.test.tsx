@@ -8,13 +8,13 @@ const noop = vi.fn();
 
 describe("List", () => {
   it("shows the empty-library invitation when nothing is saved", () => {
-    render(<List items={[]} view="all" loaded selectedId={null} notice={null} error={null} onSelect={noop} onDelete={noop} />);
+    render(<List items={[]} view="all" feedTitle={null} loaded selectedId={null} notice={null} error={null} onSelect={noop} onDelete={noop} />);
     expect(screen.getByText(/library is empty/i)).toBeInTheDocument();
     expect(screen.getByText(/save your first article/i)).toBeInTheDocument();
   });
 
   it("says you're caught up when there are no unread items", () => {
-    render(<List items={[]} view="unread" loaded selectedId={null} notice={null} error={null} onSelect={noop} onDelete={noop} />);
+    render(<List items={[]} view="unread" feedTitle={null} loaded selectedId={null} notice={null} error={null} onSelect={noop} onDelete={noop} />);
     expect(screen.getByText(/all caught up/i)).toBeInTheDocument();
   });
 
@@ -22,7 +22,7 @@ describe("List", () => {
     render(
       <List
         items={[summary({ id: 1, read_state: "unread" }), summary({ id: 2, read_state: "read", title: "Read one" })]}
-        view="all"
+        view="all" feedTitle={null}
         loaded
         selectedId={null}
         notice={null}
@@ -41,7 +41,7 @@ describe("List", () => {
     render(
       <List
         items={[summary({ id: 7, title: "Doomed" })]}
-        view="all"
+        view="all" feedTitle={null}
         loaded
         selectedId={null}
         notice={null}
@@ -60,7 +60,7 @@ describe("List", () => {
     render(
       <List
         items={[summary({ extraction_status: "extracting", enrichment_status: "pending", summary: null, title: null })]}
-        view="all"
+        view="all" feedTitle={null}
         loaded
         selectedId={null}
         notice={null}

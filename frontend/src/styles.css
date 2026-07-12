@@ -157,6 +157,100 @@ body {
   padding: 1px 7px;
   font-weight: 600;
 }
+.nav-item .dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--ink-faint);
+  flex: none;
+}
+
+/* ---- feeds section ---- */
+.feeds-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.add-sm {
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--accent);
+  border: 1px solid var(--line);
+  background: var(--surface);
+  border-radius: 6px;
+  padding: 2px 7px;
+  cursor: pointer;
+  text-transform: none;
+  letter-spacing: 0;
+}
+.add-sm:hover {
+  border-color: var(--accent);
+}
+.feed-capture {
+  padding: 0 8px 6px;
+}
+.nav-hint {
+  font-size: 12px;
+  color: var(--ink-faint);
+  padding: 2px 8px 8px;
+}
+.nav-feed {
+  display: flex;
+  align-items: center;
+  border-radius: 6px;
+}
+.nav-feed:hover {
+  background: rgba(0, 0, 0, 0.035);
+}
+.nav-feed.active {
+  background: var(--accent-soft);
+}
+.nav-feed.active .nav-feed-title,
+.nav-feed.active .count {
+  color: var(--accent);
+}
+.nav-feed-open {
+  flex: 1;
+  min-width: 0;
+}
+.nav-feed:hover,
+.nav-feed.active {
+  /* the row provides the highlight; keep the inner button transparent */
+}
+.nav-feed-open:hover {
+  background: none;
+}
+.nav-feed-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+.nav-feed-remove {
+  border: none;
+  background: none;
+  color: var(--ink-faint);
+  cursor: pointer;
+  font-size: 17px;
+  line-height: 1;
+  padding: 4px 9px;
+  border-radius: 6px;
+  opacity: 0;
+}
+.nav-feed:hover .nav-feed-remove,
+.nav-feed:focus-within .nav-feed-remove {
+  opacity: 1;
+}
+.nav-feed-remove:hover {
+  color: #a23b2f;
+  background: rgba(0, 0, 0, 0.06);
+}
+.feed-confirm {
+  display: flex;
+  gap: 4px;
+  padding-right: 6px;
+}
 
 /* ---- list ---- */
 .list {
@@ -422,8 +516,24 @@ body {
   color: var(--accent);
   text-transform: uppercase;
 }
-.mark-unread {
+.article-actions {
   margin-left: auto;
+  display: flex;
+  gap: 8px;
+}
+.save-btn {
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 5px 10px;
+  border-radius: 6px;
+  border: 1px solid rgba(74, 109, 92, 0.4);
+  background: rgba(74, 109, 92, 0.09);
+  color: var(--research);
+  cursor: pointer;
+}
+.save-btn:hover {
+  background: rgba(74, 109, 92, 0.16);
 }
 .ghost {
   font: inherit;

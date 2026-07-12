@@ -4,12 +4,14 @@ import { Capture } from "./components/Capture";
 import { Nav } from "./components/Nav";
 import { List } from "./components/List";
 import { Reader } from "./components/Reader";
-import { isPending, type ItemFull, type ItemSummary } from "./types";
+import { isPending, type Feed, type ItemFull, type ItemSummary } from "./types";
 
-type View = "all" | "unread";
+type View = "all" | "unread" | "feed";
 
 export default function App() {
   const [view, setView] = useState<View>("all");
+  const [feedId, setFeedId] = useState<number | null>(null);
+  const [feeds, setFeeds] = useState<Feed[]>([]);
   const [items, setItems] = useState<ItemSummary[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [selectedId, setSelectedId] = useState<number | null>(null);
@@ -18,9 +20,17 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
 
-  const loadList = useCallback(async (v: View) => {
+  const loadFeeds = useCallback(async () => {
     try {
-      const res = await api.list(v);
+      setFeeds((await api.feeds()).feeds);
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  const loadList = useCallback(async (v: View, fid: number | null) => {
+    try {
+      const res = await api.list(v, fid ?? undefined);
       setItems(res.items);
       setUnreadCount(res.unread_count);
       setLoaded(true);
@@ -30,80 +40,121 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    loadList(view);
-  }, [view, loadList]);
+    loadFeeds();
+  }, [loadFeeds]);
+  useEffect(() => {
+    setLoaded(false);
+    loadList(view, feedId);
+  }, [view, feedId, loadList]);
 
-  // Poll while anything visible is still extracting/enriching, so content and
-  // metadata appear without a manual refresh.
+  // Poll while anything visible is still extracting/enriching.
   const anyPending = items.some(isPending) || (selected != null && isPending(selected));
   const selectedRef = useRef(selected);
   selectedRef.current = selected;
   useEffect(() => {
     if (!anyPending) return;
     const id = setInterval(async () => {
-      await loadList(view);
+      await loadList(view, feedId);
+      await loadFeeds();
       const cur = selectedRef.current;
       if (cur && isPending(cur)) {
         try {
-          const { item } = await api.get(cur.id);
-          setSelected(item);
+          setSelected((await api.get(cur.id)).item);
         } catch {
           /* ignore transient */
         }
       }
     }, 2500);
     return () => clearInterval(id);
-  }, [anyPending, view, loadList]);
+  }, [anyPending, view, feedId, loadList, loadFeeds]);
 
-  const openItem = useCallback(async (id: number) => {
-    setSelectedId(id);
-    setNotice(null);
-    try {
-      const { item } = await api.get(id);
-      // Auto-mark-read on open (PRD O-2), with an easy "mark unread" in the reader.
-      if (item.read_state === "unread") {
-        const res = await api.markRead(id);
-        setSelected(res.item);
-        setUnreadCount(res.unread_count);
-        setItems((prev) => prev.map((i) => (i.id === id ? { ...i, read_state: "read" } : i)));
-      } else {
-        setSelected(item);
+  const openItem = useCallback(
+    async (id: number) => {
+      setSelectedId(id);
+      setNotice(null);
+      try {
+        const { item } = await api.get(id); // GET also triggers lazy-load for deferred feed items
+        if (item.read_state === "unread") {
+          const res = await api.markRead(id);
+          setSelected(res.item);
+          setUnreadCount(res.unread_count);
+          setItems((prev) => prev.map((i) => (i.id === id ? { ...i, read_state: "read" } : i)));
+          loadFeeds();
+        } else {
+          setSelected(item);
+        }
+      } catch (e) {
+        setError((e as Error).message);
       }
-    } catch (e) {
-      setError((e as Error).message);
-    }
-  }, []);
+    },
+    [loadFeeds]
+  );
 
   const onCapture = useCallback(
     async (url: string) => {
       setNotice(null);
       const res = await api.capture(url);
-      await loadList(view);
-      if (res.duplicate) {
-        setNotice("You've already saved that — here it is.");
-        openItem(res.item.id);
-      } else {
-        setSelectedId(res.item.id);
-        openItem(res.item.id);
-      }
+      setView("all");
+      setFeedId(null);
+      await loadList("all", null);
+      if (res.duplicate) setNotice("You've already saved that — here it is.");
+      openItem(res.item.id);
     },
-    [view, loadList, openItem]
+    [loadList, openItem]
   );
 
-  const onMarkUnread = useCallback(async (id: number) => {
-    const res = await api.markUnread(id);
-    setSelected(res.item);
-    setUnreadCount(res.unread_count);
-    setItems((prev) => prev.map((i) => (i.id === id ? { ...i, read_state: "unread" } : i)));
-  }, []);
+  const onAddFeed = useCallback(
+    async (url: string) => {
+      const res = await api.addFeed(url);
+      await loadFeeds();
+      setNotice(res.duplicate ? "You already follow that feed." : `Following ${res.feed.title ?? "the feed"}.`);
+      setView("feed");
+      setFeedId(res.feed.id);
+    },
+    [loadFeeds]
+  );
+
+  const onDeleteFeed = useCallback(
+    async (id: number) => {
+      await api.removeFeed(id);
+      await loadFeeds();
+      if (view === "feed" && feedId === id) {
+        setView("all");
+        setFeedId(null);
+      }
+    },
+    [view, feedId, loadFeeds]
+  );
+
+  const onMarkUnread = useCallback(
+    async (id: number) => {
+      const res = await api.markUnread(id);
+      setSelected(res.item);
+      setUnreadCount(res.unread_count);
+      setItems((prev) => prev.map((i) => (i.id === id ? { ...i, read_state: "unread" } : i)));
+      loadFeeds();
+    },
+    [loadFeeds]
+  );
 
   const onRetry = useCallback(
     async (id: number) => {
       const { item } = await api.retry(id);
       setSelected(item);
-      await loadList(view);
+      await loadList(view, feedId);
     },
-    [view, loadList]
+    [view, feedId, loadList]
+  );
+
+  const onSave = useCallback(
+    async (id: number) => {
+      const { item } = await api.save(id);
+      setSelected(item);
+      setNotice("Saved to your library.");
+      await loadList(view, feedId);
+      loadFeeds();
+    },
+    [view, feedId, loadList, loadFeeds]
   );
 
   const onDelete = useCallback(
@@ -112,9 +163,10 @@ export default function App() {
       setItems((prev) => prev.filter((i) => i.id !== id));
       setSelectedId((cur) => (cur === id ? null : cur));
       setSelected((cur) => (cur && cur.id === id ? null : cur));
-      await loadList(view);
+      await loadList(view, feedId);
+      loadFeeds();
     },
-    [view, loadList]
+    [view, feedId, loadList, loadFeeds]
   );
 
   const onBack = useCallback(() => {
@@ -126,14 +178,26 @@ export default function App() {
     <div className={`app${selectedId != null ? " reading" : ""}`}>
       <Nav
         view={view}
+        feedId={feedId}
+        feeds={feeds}
         unreadCount={unreadCount}
-        savedCount={items.length}
-        onSelectView={setView}
+        savedCount={view === "feed" ? feeds.find((f) => f.id === feedId)?.unread_count ?? 0 : items.length}
+        onSelectSaved={(v) => {
+          setView(v);
+          setFeedId(null);
+        }}
+        onSelectFeed={(id) => {
+          setView("feed");
+          setFeedId(id);
+        }}
+        onAddFeed={onAddFeed}
+        onDeleteFeed={onDeleteFeed}
         captureSlot={<Capture onCapture={onCapture} />}
       />
       <List
         items={items}
         view={view}
+        feedTitle={view === "feed" ? feeds.find((f) => f.id === feedId)?.title ?? "Feed" : null}
         loaded={loaded}
         selectedId={selectedId}
         notice={notice}
@@ -141,7 +205,7 @@ export default function App() {
         onSelect={openItem}
         onDelete={onDelete}
       />
-      <Reader item={selected} onMarkUnread={onMarkUnread} onRetry={onRetry} onBack={onBack} />
+      <Reader item={selected} onMarkUnread={onMarkUnread} onRetry={onRetry} onBack={onBack} onSave={onSave} />
     </div>
   );
 }

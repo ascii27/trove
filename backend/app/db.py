@@ -67,7 +67,23 @@ CREATE TABLE IF NOT EXISTS jobs (
     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_jobs_status ON jobs (status);
+
+CREATE TABLE IF NOT EXISTS feeds (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    url            TEXT NOT NULL UNIQUE,                   -- resolved RSS/Atom URL
+    site_url       TEXT,
+    title          TEXT,
+    last_polled_at TEXT,
+    last_error     TEXT,
+    created_at     TEXT NOT NULL DEFAULT (datetime('now'))
+);
 """
+
+# Additive migrations applied after the base schema (safe on an existing DB).
+MIGRATIONS = [
+    # Phase 2a: associate streamed items with their feed.
+    ("items", "feed_id", "ALTER TABLE items ADD COLUMN feed_id INTEGER REFERENCES feeds(id)"),
+]
 
 
 def connect(path: str | None = None) -> sqlite3.Connection:
@@ -79,9 +95,18 @@ def connect(path: str | None = None) -> sqlite3.Connection:
     return conn
 
 
+def _column_exists(conn: sqlite3.Connection, table: str, column: str) -> bool:
+    return any(r["name"] == column for r in conn.execute(f"PRAGMA table_info({table})"))
+
+
 def init_db(path: str | None = None) -> None:
     with connect(path) as conn:
         conn.executescript(SCHEMA)
+        for table, column, ddl in MIGRATIONS:
+            if not _column_exists(conn, table, column):
+                conn.execute(ddl)
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_items_feed ON items (feed_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_items_lane ON items (lane)")
         conn.commit()
 
 

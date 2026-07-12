@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import App from "../App";
 import { api } from "../api";
-import { full, summary } from "./factory";
+import { feed, full, summary } from "./factory";
 
 vi.mock("../api", () => ({
   api: {
@@ -14,21 +14,18 @@ vi.mock("../api", () => ({
     markUnread: vi.fn(),
     retry: vi.fn(),
     remove: vi.fn(),
+    save: vi.fn(),
+    feeds: vi.fn(),
+    addFeed: vi.fn(),
+    removeFeed: vi.fn(),
   },
 }));
 
-const mockApi = api as unknown as {
-  list: ReturnType<typeof vi.fn>;
-  get: ReturnType<typeof vi.fn>;
-  capture: ReturnType<typeof vi.fn>;
-  markRead: ReturnType<typeof vi.fn>;
-  markUnread: ReturnType<typeof vi.fn>;
-  retry: ReturnType<typeof vi.fn>;
-  remove: ReturnType<typeof vi.fn>;
-};
+const mockApi = api as unknown as Record<string, ReturnType<typeof vi.fn>>;
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mockApi.feeds.mockResolvedValue({ feeds: [] });
 });
 
 describe("App", () => {
@@ -86,5 +83,26 @@ describe("App", () => {
 
     await waitFor(() => expect(mockApi.remove).toHaveBeenCalledWith(5));
     await waitFor(() => expect(screen.queryByRole("button", { name: "Doomed" })).not.toBeInTheDocument());
+  });
+
+  it("adds a feed, shows it in the nav, and opens its items", async () => {
+    mockApi.list.mockResolvedValue({ items: [], unread_count: 0 });
+    mockApi.feeds
+      .mockResolvedValueOnce({ feeds: [] }) // initial
+      .mockResolvedValue({ feeds: [feed({ id: 2, title: "Pragmatic Engineer", unread_count: 1 })] });
+    mockApi.addFeed.mockResolvedValue({ feed: feed({ id: 2, title: "Pragmatic Engineer" }), duplicate: false });
+
+    render(<App />);
+    await screen.findByText(/library is empty/i);
+
+    await userEvent.click(screen.getByRole("button", { name: /add a feed/i }));
+    await userEvent.type(screen.getByLabelText(/feed or site url/i), "https://blog.pragmaticengineer.com");
+    await userEvent.click(screen.getByRole("button", { name: /^add feed$/i }));
+
+    await waitFor(() => expect(mockApi.addFeed).toHaveBeenCalledWith("https://blog.pragmaticengineer.com"));
+    // the feed view is selected and requested from the API
+    await waitFor(() => expect(mockApi.list).toHaveBeenCalledWith("feed", 2));
+    // the feed appears in the nav (as a selectable button)
+    expect(await screen.findByRole("button", { name: /^Pragmatic Engineer/ })).toBeInTheDocument();
   });
 });
