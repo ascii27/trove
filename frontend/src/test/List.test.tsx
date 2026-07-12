@@ -8,13 +8,13 @@ const noop = vi.fn();
 
 describe("List", () => {
   it("shows the empty-library invitation when nothing is saved", () => {
-    render(<List items={[]} view="all" loaded selectedId={null} notice={null} error={null} onSelect={noop} onDelete={noop} />);
+    render(<List items={[]} view="all" feedTitle={null} loaded selectedId={null} notice={null} error={null} onSelect={noop} onDelete={noop} onBackToNav={noop} />);
     expect(screen.getByText(/library is empty/i)).toBeInTheDocument();
     expect(screen.getByText(/save your first article/i)).toBeInTheDocument();
   });
 
   it("says you're caught up when there are no unread items", () => {
-    render(<List items={[]} view="unread" loaded selectedId={null} notice={null} error={null} onSelect={noop} onDelete={noop} />);
+    render(<List items={[]} view="unread" feedTitle={null} loaded selectedId={null} notice={null} error={null} onSelect={noop} onDelete={noop} onBackToNav={noop} />);
     expect(screen.getByText(/all caught up/i)).toBeInTheDocument();
   });
 
@@ -22,12 +22,12 @@ describe("List", () => {
     render(
       <List
         items={[summary({ id: 1, read_state: "unread" }), summary({ id: 2, read_state: "read", title: "Read one" })]}
-        view="all"
+        view="all" feedTitle={null}
         loaded
         selectedId={null}
         notice={null}
         error={null}
-        onSelect={noop} onDelete={noop}
+        onSelect={noop} onDelete={noop} onBackToNav={noop}
       />
     );
     // exactly one Unread tag (the unread card)
@@ -41,13 +41,13 @@ describe("List", () => {
     render(
       <List
         items={[summary({ id: 7, title: "Doomed" })]}
-        view="all"
+        view="all" feedTitle={null}
         loaded
         selectedId={null}
         notice={null}
         error={null}
         onSelect={vi.fn()}
-        onDelete={onDelete}
+        onDelete={onDelete} onBackToNav={noop}
       />
     );
     await userEvent.click(screen.getByRole("button", { name: /delete doomed/i }));
@@ -60,14 +60,34 @@ describe("List", () => {
     render(
       <List
         items={[summary({ extraction_status: "extracting", enrichment_status: "pending", summary: null, title: null })]}
-        view="all"
+        view="all" feedTitle={null}
         loaded
         selectedId={null}
         notice={null}
         error={null}
-        onSelect={noop} onDelete={noop}
+        onSelect={noop} onDelete={noop} onBackToNav={noop}
       />
     );
     expect(screen.getByText(/extracting the article/i)).toBeInTheDocument();
+  });
+
+  it("offers a back-to-menu control (mobile) that fires onBackToNav", async () => {
+    const onBackToNav = vi.fn();
+    render(
+      <List
+        items={[summary()]}
+        view="feed"
+        feedTitle="Pragmatic Engineer"
+        loaded
+        selectedId={null}
+        notice={null}
+        error={null}
+        onSelect={noop}
+        onDelete={noop}
+        onBackToNav={onBackToNav}
+      />
+    );
+    await userEvent.click(screen.getByRole("button", { name: /back to menu/i }));
+    expect(onBackToNav).toHaveBeenCalled();
   });
 });

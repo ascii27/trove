@@ -6,12 +6,17 @@ import sqlite3
 from . import topics as topics_mod
 from .enrich import EnrichResult
 from .extract import Extracted
+from .feedfetch import Entry
+from .urls import canonicalize
 
 MAX_ATTEMPTS = 3
+# Newest N new items per poll get the full fetch/extract/enrich; the rest are
+# 'deferred' and load on first open (bounds enrichment token spend).
+EAGER_PER_POLL = 10
 
 # Columns returned in list views (no heavy content).
 _LIST_COLS = (
-    "id, url_canonical, lane, title, author, source, publish_date, word_count, "
+    "id, url_canonical, lane, feed_id, title, author, source, publish_date, word_count, "
     "reading_minutes, original_url, date_saved, read_state, extraction_status, "
     "enrichment_status, summary, category, source_type, error_message"
 )
@@ -64,13 +69,18 @@ def get_item(conn: sqlite3.Connection, item_id: int) -> dict | None:
     return item
 
 
-def list_items(conn: sqlite3.Connection, view: str = "all") -> list[dict]:
-    where = "WHERE lane = 'saved'"
-    if view == "unread":
-        where += " AND read_state = 'unread'"
-    rows = conn.execute(
-        f"SELECT {_LIST_COLS} FROM items {where} ORDER BY date_saved DESC, id DESC"
-    ).fetchall()
+def list_items(conn: sqlite3.Connection, view: str = "all", feed_id: int | None = None) -> list[dict]:
+    if view == "feed":
+        # Feed items list newest-first by the entry's own publish time (NULLs last).
+        where, params = "WHERE lane = 'feed' AND feed_id = ? AND read_state != 'archived'", (feed_id,)
+        order = "ORDER BY (published_at IS NULL), published_at DESC, id DESC"
+    elif view == "unread":
+        where, params = "WHERE lane = 'saved' AND read_state = 'unread'", ()
+        order = "ORDER BY date_saved DESC, id DESC"
+    else:  # 'all' — Saved lane only (lanes stay strictly separate)
+        where, params = "WHERE lane = 'saved'", ()
+        order = "ORDER BY date_saved DESC, id DESC"
+    rows = conn.execute(f"SELECT {_LIST_COLS} FROM items {where} {order}", params).fetchall()
     return [_item_dict(r) for r in rows]
 
 
@@ -188,6 +198,124 @@ def apply_extraction(conn: sqlite3.Connection, item_id: int, result: Extracted) 
     )
     if result.status in ("extracted", "partial"):
         enqueue_job(conn, item_id, "enrich")
+
+
+# ------------------------------------------------------------------ feeds ----
+_FEED_COLS = "id, url, site_url, title, last_polled_at, last_error, created_at"
+
+
+def add_feed(conn: sqlite3.Connection, feed_url: str, site_url: str | None, title: str | None) -> int:
+    conn.execute(
+        "INSERT OR IGNORE INTO feeds (url, site_url, title) VALUES (?, ?, ?)",
+        (feed_url, site_url, title),
+    )
+    return conn.execute("SELECT id FROM feeds WHERE url = ?", (feed_url,)).fetchone()["id"]
+
+
+def get_feed_by_url(conn: sqlite3.Connection, feed_url: str) -> sqlite3.Row | None:
+    return conn.execute(f"SELECT {_FEED_COLS} FROM feeds WHERE url = ?", (feed_url,)).fetchone()
+
+
+def get_feed(conn: sqlite3.Connection, feed_id: int) -> sqlite3.Row | None:
+    return conn.execute(f"SELECT {_FEED_COLS} FROM feeds WHERE id = ?", (feed_id,)).fetchone()
+
+
+def list_feeds(conn: sqlite3.Connection) -> list[dict]:
+    rows = conn.execute(
+        f"""SELECT {_FEED_COLS},
+               (SELECT COUNT(*) FROM items i
+                WHERE i.feed_id = feeds.id AND i.lane = 'feed'
+                  AND i.read_state = 'unread') AS unread_count
+            FROM feeds ORDER BY title COLLATE NOCASE, id"""
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def delete_feed(conn: sqlite3.Connection, feed_id: int) -> bool:
+    if conn.execute("SELECT 1 FROM feeds WHERE id = ?", (feed_id,)).fetchone() is None:
+        return False
+    # Drop the feed's streamed items; anything promoted to Saved survives.
+    conn.execute("DELETE FROM items WHERE feed_id = ? AND lane = 'feed'", (feed_id,))
+    # Release the FK on surviving (saved) items before removing the feed.
+    conn.execute("UPDATE items SET feed_id = NULL WHERE feed_id = ?", (feed_id,))
+    conn.execute("DELETE FROM feeds WHERE id = ?", (feed_id,))
+    return True
+
+
+def mark_feed_polled(conn: sqlite3.Connection, feed_id: int, error: str | None = None) -> None:
+    conn.execute(
+        "UPDATE feeds SET last_polled_at = datetime('now'), last_error = ? WHERE id = ?",
+        (error, feed_id),
+    )
+
+
+def feeds_due(conn: sqlite3.Connection, interval_seconds: int) -> list[sqlite3.Row]:
+    return conn.execute(
+        f"SELECT {_FEED_COLS} FROM feeds "
+        "WHERE last_polled_at IS NULL OR last_polled_at <= datetime('now', ?)",
+        (f"-{interval_seconds} seconds",),
+    ).fetchall()
+
+
+def ingest_entries(
+    conn: sqlite3.Connection,
+    feed_id: int,
+    feed_title: str | None,
+    entries: list[Entry],
+    *,
+    eager_limit: int = EAGER_PER_POLL,
+) -> dict:
+    """Create items for new entries. Newest `eager_limit` get the full pipeline;
+    the rest are 'deferred'. Dedupe on canonical URL across the whole library."""
+    eager = deferred = 0
+    for entry in entries:
+        canon = canonicalize(entry.link)
+        if conn.execute("SELECT 1 FROM items WHERE url_canonical = ?", (canon,)).fetchone():
+            continue  # already saved or streamed (possibly from another feed)
+        make_eager = eager < eager_limit
+        status = "pending" if make_eager else "deferred"
+        cur = conn.execute(
+            "INSERT INTO items (url_canonical, original_url, lane, feed_id, title, source, "
+            "publish_date, published_at, summary, extraction_status) "
+            "VALUES (?, ?, 'feed', ?, ?, ?, ?, ?, ?, ?)",
+            (canon, entry.link, feed_id, entry.title, feed_title, entry.published, entry.published_at, entry.summary, status),
+        )
+        if make_eager:
+            enqueue_job(conn, cur.lastrowid, "extract")
+            eager += 1
+        else:
+            deferred += 1
+    return {"eager": eager, "deferred": deferred}
+
+
+def age_feed_items(conn: sqlite3.Connection, days: int) -> int:
+    cur = conn.execute(
+        "UPDATE items SET read_state = 'archived' "
+        "WHERE lane = 'feed' AND read_state = 'unread' AND date_saved <= datetime('now', ?)",
+        (f"-{days} days",),
+    )
+    return cur.rowcount
+
+
+def promote_to_saved(conn: sqlite3.Connection, item_id: int) -> bool:
+    row = conn.execute("SELECT lane, extraction_status FROM items WHERE id = ?", (item_id,)).fetchone()
+    if row is None:
+        return False
+    conn.execute("UPDATE items SET lane = 'saved', read_state = CASE WHEN read_state='archived' THEN 'unread' ELSE read_state END WHERE id = ?", (item_id,))
+    if row["extraction_status"] == "deferred":
+        _load_deferred(conn, item_id)
+    return True
+
+
+def load_if_deferred(conn: sqlite3.Connection, item_id: int) -> None:
+    row = conn.execute("SELECT extraction_status FROM items WHERE id = ?", (item_id,)).fetchone()
+    if row is not None and row["extraction_status"] == "deferred":
+        _load_deferred(conn, item_id)
+
+
+def _load_deferred(conn: sqlite3.Connection, item_id: int) -> None:
+    conn.execute("UPDATE items SET extraction_status = 'pending' WHERE id = ?", (item_id,))
+    enqueue_job(conn, item_id, "extract")
 
 
 def apply_enrichment(conn: sqlite3.Connection, item_id: int, result: EnrichResult) -> None:

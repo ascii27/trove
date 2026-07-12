@@ -7,6 +7,7 @@ interface Props {
   onMarkUnread: (id: number) => void;
   onRetry: (id: number) => void;
   onBack: () => void;
+  onSave: (id: number) => void;
 }
 
 const SOURCE_LABEL: Record<string, string> = {
@@ -79,7 +80,7 @@ function MetaPanel({ item }: { item: ItemFull }) {
   );
 }
 
-export function Reader({ item, onMarkUnread, onRetry, onBack }: Props) {
+export function Reader({ item, onMarkUnread, onRetry, onBack, onSave }: Props) {
   let content: ReactNode;
 
   if (!item) {
@@ -110,9 +111,16 @@ export function Reader({ item, onMarkUnread, onRetry, onBack }: Props) {
         <article className="article">
           <div className="article-head">
             {item.category && <div className="eyebrow">{item.category}</div>}
-            <button className="ghost mark-unread" onClick={() => onMarkUnread(item.id)}>
-              Mark unread
-            </button>
+            <div className="article-actions">
+              {item.lane === "feed" && (
+                <button className="save-btn" onClick={() => onSave(item.id)}>
+                  Save to library
+                </button>
+              )}
+              <button className="ghost mark-unread" onClick={() => onMarkUnread(item.id)}>
+                Mark unread
+              </button>
+            </div>
           </div>
           <h1>{item.title ?? item.original_url}</h1>
           <div className="byline">

@@ -25,3 +25,15 @@ def anthropic_api_key() -> str | None:
 def static_dir() -> str | None:
     """Directory holding the built React SPA, if present (set in the container)."""
     return os.environ.get("TROVE_STATIC_DIR")
+
+
+def feed_poll_seconds() -> int:
+    return int(os.environ.get("TROVE_FEED_POLL_SECONDS", "1800"))  # 30 min
+
+
+def feed_age_days() -> int:
+    return int(os.environ.get("TROVE_FEED_AGE_DAYS", "30"))
+
+
+def feed_age_sweep_seconds() -> int:
+    return int(os.environ.get("TROVE_FEED_AGE_SWEEP_SECONDS", "3600"))  # hourly
