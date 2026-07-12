@@ -12,7 +12,12 @@ import feedparser
 import httpx
 from lxml import html as lxml_html
 
-_UA = "Mozilla/5.0 (compatible; Trove/0.1; +https://trove-app.exe.xyz)"
+# A full browser UA — Cloudflare-fronted feeds (e.g. Substack/Ghost blogs) often
+# challenge or 403 bot-ish agents, which surfaces as a flaky "couldn't add feed".
+_UA = (
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/124.0 Safari/537.36"
+)
 
 
 class FeedError(Exception):
