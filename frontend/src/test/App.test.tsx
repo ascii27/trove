@@ -13,6 +13,7 @@ vi.mock("../api", () => ({
     markRead: vi.fn(),
     markUnread: vi.fn(),
     retry: vi.fn(),
+    remove: vi.fn(),
   },
 }));
 
@@ -23,6 +24,7 @@ const mockApi = api as unknown as {
   markRead: ReturnType<typeof vi.fn>;
   markUnread: ReturnType<typeof vi.fn>;
   retry: ReturnType<typeof vi.fn>;
+  remove: ReturnType<typeof vi.fn>;
 };
 
 beforeEach(() => {
@@ -36,7 +38,7 @@ describe("App", () => {
     mockApi.markRead.mockResolvedValue({ item: full({ id: 5, read_state: "read" }), unread_count: 0 });
 
     render(<App />);
-    const card = await screen.findByRole("button", { name: /internal developer platform/i });
+    const card = await screen.findByRole("button", { name: "The anatomy of an internal developer platform" });
     await userEvent.click(card);
 
     await waitFor(() => expect(mockApi.markRead).toHaveBeenCalledWith(5));
@@ -68,5 +70,21 @@ describe("App", () => {
 
     await waitFor(() => expect(mockApi.capture).toHaveBeenCalledWith("https://example.com/post"));
     expect(await screen.findByText(/extracting the article/i)).toBeInTheDocument();
+  });
+
+  it("deletes an item and removes it from the list", async () => {
+    mockApi.list
+      .mockResolvedValueOnce({ items: [summary({ id: 5, title: "Doomed" })], unread_count: 1 })
+      .mockResolvedValue({ items: [], unread_count: 0 });
+    mockApi.remove.mockResolvedValue({ deleted: true, unread_count: 0 });
+
+    render(<App />);
+    await screen.findByRole("button", { name: "Doomed" });
+
+    await userEvent.click(screen.getByRole("button", { name: /delete doomed/i }));
+    await userEvent.click(screen.getByRole("button", { name: /^delete$/i }));
+
+    await waitFor(() => expect(mockApi.remove).toHaveBeenCalledWith(5));
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Doomed" })).not.toBeInTheDocument());
   });
 });

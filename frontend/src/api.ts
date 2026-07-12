@@ -37,4 +37,6 @@ export const api = {
   markUnread: (id: number) =>
     req<{ item: ItemFull; unread_count: number }>(`/api/items/${id}/unread`, { method: "POST" }),
   retry: (id: number) => req<{ item: ItemFull }>(`/api/items/${id}/retry`, { method: "POST" }),
+  remove: (id: number) =>
+    req<{ deleted: boolean; unread_count: number }>(`/api/items/${id}`, { method: "DELETE" }),
 };

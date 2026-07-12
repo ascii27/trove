@@ -148,6 +148,12 @@ def fail_job(conn: sqlite3.Connection, job: sqlite3.Row, error: str) -> None:
             )
 
 
+def delete_item(conn: sqlite3.Connection, item_id: int) -> bool:
+    """Delete an item; FK ON DELETE CASCADE clears its topics/claims/jobs."""
+    cur = conn.execute("DELETE FROM items WHERE id = ?", (item_id,))
+    return cur.rowcount > 0
+
+
 def retry_extract(conn: sqlite3.Connection, item_id: int) -> bool:
     """Reset a failed extraction and enqueue a fresh extract job."""
     row = conn.execute("SELECT extraction_status FROM items WHERE id = ?", (item_id,)).fetchone()

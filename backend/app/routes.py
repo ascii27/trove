@@ -69,6 +69,14 @@ def mark_unread(item_id: int) -> dict:
         return {"item": store.get_item(conn, item_id), "unread_count": store.unread_count(conn)}
 
 
+@router.delete("/items/{item_id}")
+def delete_item(item_id: int) -> dict:
+    with db.cursor() as conn:
+        if not store.delete_item(conn, item_id):
+            raise HTTPException(status_code=404, detail="Item not found.")
+        return {"deleted": True, "unread_count": store.unread_count(conn)}
+
+
 @router.post("/items/{item_id}/retry")
 def retry(item_id: int) -> dict:
     with db.cursor() as conn:

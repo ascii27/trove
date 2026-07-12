@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { renderMarkdown } from "../render";
 import type { ItemFull } from "../types";
 
@@ -5,6 +6,7 @@ interface Props {
   item: ItemFull | null;
   onMarkUnread: (id: number) => void;
   onRetry: (id: number) => void;
+  onBack: () => void;
 }
 
 const SOURCE_LABEL: Record<string, string> = {
@@ -32,9 +34,7 @@ function MetaPanel({ item }: { item: ItemFull }) {
             <div className="field">
               <div className="k">Source type</div>
               <div className="v">
-                <span className={`src-pill src-${item.source_type}`}>
-                  {SOURCE_LABEL[item.source_type]}
-                </span>
+                <span className={`src-pill src-${item.source_type}`}>{SOURCE_LABEL[item.source_type]}</span>
               </div>
             </div>
           )}
@@ -79,75 +79,78 @@ function MetaPanel({ item }: { item: ItemFull }) {
   );
 }
 
-export function Reader({ item, onMarkUnread, onRetry }: Props) {
+export function Reader({ item, onMarkUnread, onRetry, onBack }: Props) {
+  let content: ReactNode;
+
   if (!item) {
-    return (
-      <section className="reader">
-        <div className="reader-empty">Select something to read.</div>
-      </section>
+    content = <div className="reader-empty">Select something to read.</div>;
+  } else if (item.extraction_status === "pending" || item.extraction_status === "extracting") {
+    content = (
+      <div className="reader-empty">
+        <p>Extracting the article…</p>
+        <p className="muted">This usually takes a moment.</p>
+      </div>
     );
-  }
-
-  if (item.extraction_status === "pending" || item.extraction_status === "extracting") {
-    return (
-      <section className="reader">
-        <div className="reader-empty">
-          <p>Extracting the article…</p>
-          <p className="muted">This usually takes a moment.</p>
+  } else if (item.extraction_status === "failed") {
+    content = (
+      <div className="reader-empty reader-failed">
+        <p className="empty-title">We couldn't extract this page.</p>
+        <p className="muted">{item.error_message ?? "The page couldn't be read."}</p>
+        <div className="failed-actions">
+          <button onClick={() => onRetry(item.id)}>Retry extraction</button>
+          <a className="button-link" href={item.original_url} target="_blank" rel="noopener noreferrer">
+            Open the original
+          </a>
         </div>
-      </section>
+      </div>
     );
-  }
-
-  if (item.extraction_status === "failed") {
-    return (
-      <section className="reader">
-        <div className="reader-empty reader-failed">
-          <p className="empty-title">We couldn't extract this page.</p>
-          <p className="muted">{item.error_message ?? "The page couldn't be read."}</p>
-          <div className="failed-actions">
-            <button onClick={() => onRetry(item.id)}>Retry extraction</button>
-            <a className="button-link" href={item.original_url} target="_blank" rel="noopener noreferrer">
-              Open the original
-            </a>
+  } else {
+    content = (
+      <>
+        <article className="article">
+          <div className="article-head">
+            {item.category && <div className="eyebrow">{item.category}</div>}
+            <button className="ghost mark-unread" onClick={() => onMarkUnread(item.id)}>
+              Mark unread
+            </button>
           </div>
-        </div>
-      </section>
+          <h1>{item.title ?? item.original_url}</h1>
+          <div className="byline">
+            {[
+              item.author,
+              item.source,
+              item.publish_date,
+              item.reading_minutes ? `${item.reading_minutes} min read` : null,
+            ]
+              .filter(Boolean)
+              .join(" · ")}
+          </div>
+          {item.extraction_status === "partial" && (
+            <div className="partial-banner">
+              This capture looks partial (the page may be paywalled). Showing what we got —{" "}
+              <a href={item.original_url} target="_blank" rel="noopener noreferrer">
+                open the original
+              </a>
+              .
+            </div>
+          )}
+          {item.content_text && (
+            <div className="prose" dangerouslySetInnerHTML={{ __html: renderMarkdown(item.content_text) }} />
+          )}
+        </article>
+        <MetaPanel item={item} />
+      </>
     );
   }
 
   return (
     <section className="reader">
-      <article className="article">
-        <div className="article-head">
-          {item.category && <div className="eyebrow">{item.category}</div>}
-          <button className="ghost mark-unread" onClick={() => onMarkUnread(item.id)}>
-            Mark unread
-          </button>
-        </div>
-        <h1>{item.title ?? item.original_url}</h1>
-        <div className="byline">
-          {[item.author, item.source, item.publish_date, item.reading_minutes ? `${item.reading_minutes} min read` : null]
-            .filter(Boolean)
-            .join(" · ")}
-        </div>
-        {item.extraction_status === "partial" && (
-          <div className="partial-banner">
-            This capture looks partial (the page may be paywalled). Showing what we got —{" "}
-            <a href={item.original_url} target="_blank" rel="noopener noreferrer">
-              open the original
-            </a>
-            .
-          </div>
-        )}
-        {item.content_text && (
-          <div
-            className="prose"
-            dangerouslySetInnerHTML={{ __html: renderMarkdown(item.content_text) }}
-          />
-        )}
-      </article>
-      <MetaPanel item={item} />
+      {item && (
+        <button className="reader-back" onClick={onBack} aria-label="Back to the list">
+          ← Back
+        </button>
+      )}
+      {content}
     </section>
   );
 }

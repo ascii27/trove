@@ -6,13 +6,13 @@ import { full } from "./factory";
 
 describe("Reader", () => {
   it("prompts to select when nothing is open", () => {
-    render(<Reader item={null} onMarkUnread={vi.fn()} onRetry={vi.fn()} />);
+    render(<Reader item={null} onMarkUnread={vi.fn()} onRetry={vi.fn()} onBack={vi.fn()} />);
     expect(screen.getByText(/select something to read/i)).toBeInTheDocument();
   });
 
   it("renders the article, metadata, and a working Mark unread", async () => {
     const onMarkUnread = vi.fn();
-    render(<Reader item={full({ read_state: "read" })} onMarkUnread={onMarkUnread} onRetry={vi.fn()} />);
+    render(<Reader item={full({ read_state: "read" })} onMarkUnread={onMarkUnread} onRetry={vi.fn()} onBack={vi.fn()} />);
 
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(/internal developer platform/i);
     expect(screen.getByText(/adoption is voluntary/i)).toBeInTheDocument(); // summary
@@ -29,7 +29,7 @@ describe("Reader", () => {
       <Reader
         item={full({ enrichment_status: "enriching", summary: null, topics: [], claims: [] })}
         onMarkUnread={vi.fn()}
-        onRetry={vi.fn()}
+        onRetry={vi.fn()} onBack={vi.fn()}
       />
     );
     expect(screen.getByText(/analyzing/i)).toBeInTheDocument();
@@ -41,7 +41,7 @@ describe("Reader", () => {
       <Reader
         item={full({ extraction_status: "failed", error_message: "Could not reach the page." })}
         onMarkUnread={vi.fn()}
-        onRetry={onRetry}
+        onRetry={onRetry} onBack={vi.fn()}
       />
     );
     expect(screen.getByText(/couldn't extract this page/i)).toBeInTheDocument();
@@ -51,7 +51,19 @@ describe("Reader", () => {
   });
 
   it("flags a partial capture", () => {
-    render(<Reader item={full({ extraction_status: "partial" })} onMarkUnread={vi.fn()} onRetry={vi.fn()} />);
+    render(<Reader item={full({ extraction_status: "partial" })} onMarkUnread={vi.fn()} onRetry={vi.fn()} onBack={vi.fn()} />);
     expect(screen.getByText(/looks partial/i)).toBeInTheDocument();
+  });
+
+  it("offers a back control that fires onBack (mobile navigation)", async () => {
+    const onBack = vi.fn();
+    render(<Reader item={full()} onMarkUnread={vi.fn()} onRetry={vi.fn()} onBack={onBack} />);
+    await userEvent.click(screen.getByRole("button", { name: /back to the list/i }));
+    expect(onBack).toHaveBeenCalled();
+  });
+
+  it("shows no back control when nothing is open", () => {
+    render(<Reader item={null} onMarkUnread={vi.fn()} onRetry={vi.fn()} onBack={vi.fn()} />);
+    expect(screen.queryByRole("button", { name: /back to the list/i })).not.toBeInTheDocument();
   });
 });

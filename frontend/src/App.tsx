@@ -106,8 +106,24 @@ export default function App() {
     [view, loadList]
   );
 
+  const onDelete = useCallback(
+    async (id: number) => {
+      await api.remove(id);
+      setItems((prev) => prev.filter((i) => i.id !== id));
+      setSelectedId((cur) => (cur === id ? null : cur));
+      setSelected((cur) => (cur && cur.id === id ? null : cur));
+      await loadList(view);
+    },
+    [view, loadList]
+  );
+
+  const onBack = useCallback(() => {
+    setSelectedId(null);
+    setSelected(null);
+  }, []);
+
   return (
-    <div className="app">
+    <div className={`app${selectedId != null ? " reading" : ""}`}>
       <Nav
         view={view}
         unreadCount={unreadCount}
@@ -123,8 +139,9 @@ export default function App() {
         notice={notice}
         error={error}
         onSelect={openItem}
+        onDelete={onDelete}
       />
-      <Reader item={selected} onMarkUnread={onMarkUnread} onRetry={onRetry} />
+      <Reader item={selected} onMarkUnread={onMarkUnread} onRetry={onRetry} onBack={onBack} />
     </div>
   );
 }

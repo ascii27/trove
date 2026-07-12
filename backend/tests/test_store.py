@@ -52,6 +52,22 @@ def test_read_state_and_unread_count(conn):
     assert [i["id"] for i in store.list_items(conn, "unread")] == [b]
 
 
+def test_delete_item_cascades(conn):
+    from app.enrich import EnrichResult
+
+    item_id = _new_item(conn)
+    store.apply_extraction(conn, item_id, Extracted(status="extracted", content_text="b", word_count=200, reading_minutes=1))
+    store.apply_enrichment(conn, item_id, EnrichResult("s", ["AI"], "essay", "analysis", ["c1"]))
+    conn.commit()
+
+    assert store.delete_item(conn, item_id)
+    conn.commit()
+    assert conn.execute("SELECT COUNT(*) c FROM items WHERE id=?", (item_id,)).fetchone()["c"] == 0
+    assert conn.execute("SELECT COUNT(*) c FROM claims WHERE item_id=?", (item_id,)).fetchone()["c"] == 0
+    assert conn.execute("SELECT COUNT(*) c FROM item_topics WHERE item_id=?", (item_id,)).fetchone()["c"] == 0
+    assert conn.execute("SELECT COUNT(*) c FROM jobs WHERE item_id=?", (item_id,)).fetchone()["c"] == 0
+
+
 def test_retry_extract_resets_and_requeues(conn):
     item_id = _new_item(conn)
     # Mirror the worker: the extract job completes, leaving the item in 'failed'.

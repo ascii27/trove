@@ -44,6 +44,20 @@ def test_mark_read_unread_roundtrip(client):
     assert unread["unread_count"] == 1
 
 
+def test_delete_item(client):
+    item_id = client.post("/api/items", json={"url": "https://example.com/a"}).json()["item"]["id"]
+    client.post("/api/items", json={"url": "https://example.com/b"})
+    res = client.delete(f"/api/items/{item_id}")
+    assert res.status_code == 200
+    assert res.json()["deleted"] is True
+    remaining = client.get("/api/items?view=all").json()["items"]
+    assert [i["id"] for i in remaining] != [] and item_id not in [i["id"] for i in remaining]
+
+
+def test_delete_missing_item_404(client):
+    assert client.delete("/api/items/999").status_code == 404
+
+
 def test_get_missing_item_404(client):
     assert client.get("/api/items/999").status_code == 404
 
