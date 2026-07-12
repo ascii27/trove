@@ -15,3 +15,6 @@ coverage/
 *.db-wal
 *.db-shm
 .env
+
+# TS build cache
+*.tsbuildinfo
