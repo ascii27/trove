@@ -1,0 +1,16 @@
+services:
+  trove:
+    build: .
+    ports:
+      - "8000:8000"
+    volumes:
+      - trove-data:/data
+    environment:
+      - TROVE_DB_PATH=/data/trove.db
+      - TROVE_STATIC_DIR=/app/static
+      - TROVE_ENRICH_MODEL=${TROVE_ENRICH_MODEL:-claude-haiku-4-5}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+    restart: unless-stopped
+
+volumes:
+  trove-data:
