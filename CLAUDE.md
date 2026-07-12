@@ -4,7 +4,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What Trove is
 
-A personal read-later, research, and feed-reading tool (self-hosted, single user). **Phase 1** (this codebase) delivers the Pocket replacement: capture a URL → server-side article extraction → calm typography-first reader → AI-generated metadata (summary, topics, source type, key claims) → read/unread tracking. Feeds, interest-lenses/query, research collections, and cross-source synthesis are **later phases** (out of scope now); the schema already carries the `lane` column, a durable `jobs` worker, and a canonical `topics` table so those phases extend rather than rewrite.
+A personal read-later, research, and feed-reading tool (self-hosted, single user).
+
+- **Phase 1** — Pocket replacement: capture a URL → server-side extraction → calm typography-first reader → AI metadata (summary, topics, source type, key claims) → read/unread + delete.
+- **Phase 2a (Feeds)** — the second, "streamed" lane: add RSS/Atom feeds (paste a feed URL *or* a site URL and it auto-discovers the feed), a background poller pulls new items in as `lane='feed'`, the newest 10 per poll get the full extract+enrich pipeline while the rest are `deferred` (load on first open), unread feed items auto-archive after 30 days, and you can promote (save) a feed item into the Saved lane. Lanes stay strictly separate.
+
+Still to come: **2b** interest-lenses/query (cross-lane "read about X", semantic search), **2c** research collections, **3** cross-source synthesis. The `lane` column, durable `jobs` worker, and canonical `topics` table were built in Phase 1 so these extend rather than rewrite.
 
 Full design + rationale: `~/.claude/plans/staged-noodling-sparkle.md`. Product spec (external): `~/Downloads/files/trove-prd.md`; IA mockup: `~/Downloads/files/reader-ia-mockup.html`.
 

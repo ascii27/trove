@@ -3,13 +3,15 @@ import type { ItemSummary } from "../types";
 
 interface Props {
   items: ItemSummary[];
-  view: "all" | "unread";
+  view: "all" | "unread" | "feed";
+  feedTitle: string | null;
   loaded: boolean;
   selectedId: number | null;
   notice: string | null;
   error: string | null;
   onSelect: (id: number) => void;
   onDelete: (id: number) => void;
+  onBackToNav: () => void;
 }
 
 function metaBits(i: ItemSummary): string[] {
@@ -31,6 +33,9 @@ function cardBody(i: ItemSummary) {
   if (i.summary) {
     return <span className="snippet">{i.summary}</span>;
   }
+  if (i.extraction_status === "deferred") {
+    return <span className="snippet muted">Open to load the full article.</span>;
+  }
   return <span className="snippet muted">Analyzing…</span>;
 }
 
@@ -40,14 +45,18 @@ const TrashIcon = () => (
   </svg>
 );
 
-export function List({ items, view, loaded, selectedId, notice, error, onSelect, onDelete }: Props) {
+export function List({ items, view, feedTitle, loaded, selectedId, notice, error, onSelect, onDelete, onBackToNav }: Props) {
   const [confirmId, setConfirmId] = useState<number | null>(null);
-  const title = view === "unread" ? "Unread" : "All saved";
-  const subtitle = view === "unread" ? "Saved and not yet read" : "Things you chose to keep";
+  const title = view === "feed" ? feedTitle ?? "Feed" : view === "unread" ? "Unread" : "All saved";
+  const subtitle =
+    view === "feed" ? "Streamed in" : view === "unread" ? "Saved and not yet read" : "Things you chose to keep";
 
   return (
     <section className="list">
       <div className="list-head">
+        <button className="list-back" onClick={onBackToNav} aria-label="Back to menu">
+          ← Menu
+        </button>
         <h2>{title}</h2>
         <div className="sub">{subtitle}</div>
         {notice && <div className="notice">{notice}</div>}
@@ -59,6 +68,11 @@ export function List({ items, view, loaded, selectedId, notice, error, onSelect,
           <div className="empty-state">
             <p className="empty-title">You're all caught up.</p>
             <p className="empty-sub">Nothing unread. Nicely done.</p>
+          </div>
+        ) : view === "feed" ? (
+          <div className="empty-state">
+            <p className="empty-title">Nothing here yet.</p>
+            <p className="empty-sub">New items will stream in as this feed publishes.</p>
           </div>
         ) : (
           <div className="empty-state">

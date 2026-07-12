@@ -1,8 +1,23 @@
-import type { ItemFull, ItemSummary } from "../types";
+import type { Feed, ItemFull, ItemSummary } from "../types";
+
+export function feed(over: Partial<Feed> = {}): Feed {
+  return {
+    id: 1,
+    url: "https://blog.pragmaticengineer.com/rss",
+    site_url: "https://blog.pragmaticengineer.com",
+    title: "Pragmatic Engineer",
+    last_polled_at: "2026-07-12 10:00:00",
+    last_error: null,
+    unread_count: 3,
+    ...over,
+  };
+}
 
 export function summary(over: Partial<ItemSummary> = {}): ItemSummary {
   return {
     id: 1,
+    lane: "saved",
+    feed_id: null,
     title: "The anatomy of an internal developer platform",
     author: "Susanne Kaiser",
     source: "martinfowler.com",

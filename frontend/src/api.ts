@@ -1,4 +1,4 @@
-import type { ItemFull, ItemSummary } from "./types";
+import type { Feed, ItemFull, ItemSummary } from "./types";
 
 async function req<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(path, {
@@ -27,8 +27,17 @@ export interface CaptureResponse {
   duplicate: boolean;
 }
 
+export interface FeedsResponse {
+  feeds: Feed[];
+}
+export interface AddFeedResponse {
+  feed: Feed;
+  duplicate: boolean;
+}
+
 export const api = {
-  list: (view: "all" | "unread") => req<ListResponse>(`/api/items?view=${view}`),
+  list: (view: "all" | "unread" | "feed", feedId?: number) =>
+    req<ListResponse>(`/api/items?view=${view}${feedId != null ? `&feed_id=${feedId}` : ""}`),
   get: (id: number) => req<{ item: ItemFull }>(`/api/items/${id}`),
   capture: (url: string) =>
     req<CaptureResponse>("/api/items", { method: "POST", body: JSON.stringify({ url }) }),
@@ -39,4 +48,10 @@ export const api = {
   retry: (id: number) => req<{ item: ItemFull }>(`/api/items/${id}/retry`, { method: "POST" }),
   remove: (id: number) =>
     req<{ deleted: boolean; unread_count: number }>(`/api/items/${id}`, { method: "DELETE" }),
+  save: (id: number) => req<{ item: ItemFull }>(`/api/items/${id}/save`, { method: "POST" }),
+
+  feeds: () => req<FeedsResponse>("/api/feeds"),
+  addFeed: (url: string) =>
+    req<AddFeedResponse>("/api/feeds", { method: "POST", body: JSON.stringify({ url }) }),
+  removeFeed: (id: number) => req<{ deleted: boolean }>(`/api/feeds/${id}`, { method: "DELETE" }),
 };

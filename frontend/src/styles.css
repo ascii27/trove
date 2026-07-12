@@ -157,6 +157,100 @@ body {
   padding: 1px 7px;
   font-weight: 600;
 }
+.nav-item .dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--ink-faint);
+  flex: none;
+}
+
+/* ---- feeds section ---- */
+.feeds-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.add-sm {
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--accent);
+  border: 1px solid var(--line);
+  background: var(--surface);
+  border-radius: 6px;
+  padding: 2px 7px;
+  cursor: pointer;
+  text-transform: none;
+  letter-spacing: 0;
+}
+.add-sm:hover {
+  border-color: var(--accent);
+}
+.feed-capture {
+  padding: 0 8px 6px;
+}
+.nav-hint {
+  font-size: 12px;
+  color: var(--ink-faint);
+  padding: 2px 8px 8px;
+}
+.nav-feed {
+  display: flex;
+  align-items: center;
+  border-radius: 6px;
+}
+.nav-feed:hover {
+  background: rgba(0, 0, 0, 0.035);
+}
+.nav-feed.active {
+  background: var(--accent-soft);
+}
+.nav-feed.active .nav-feed-title,
+.nav-feed.active .count {
+  color: var(--accent);
+}
+.nav-feed-open {
+  flex: 1;
+  min-width: 0;
+}
+.nav-feed:hover,
+.nav-feed.active {
+  /* the row provides the highlight; keep the inner button transparent */
+}
+.nav-feed-open:hover {
+  background: none;
+}
+.nav-feed-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+.nav-feed-remove {
+  border: none;
+  background: none;
+  color: var(--ink-faint);
+  cursor: pointer;
+  font-size: 17px;
+  line-height: 1;
+  padding: 4px 9px;
+  border-radius: 6px;
+  opacity: 0;
+}
+.nav-feed:hover .nav-feed-remove,
+.nav-feed:focus-within .nav-feed-remove {
+  opacity: 1;
+}
+.nav-feed-remove:hover {
+  color: #a23b2f;
+  background: rgba(0, 0, 0, 0.06);
+}
+.feed-confirm {
+  display: flex;
+  gap: 4px;
+  padding-right: 6px;
+}
 
 /* ---- list ---- */
 .list {
@@ -358,8 +452,9 @@ body {
   display: grid;
   grid-template-columns: 1fr 280px;
 }
-/* Back button is a mobile-only affordance; the three-pane desktop reader is always visible. */
-.reader-back {
+/* Back buttons are mobile-only; the three-pane desktop layout shows all panes. */
+.reader-back,
+.list-back {
   display: none;
 }
 .reader-empty {
@@ -422,8 +517,25 @@ body {
   color: var(--accent);
   text-transform: uppercase;
 }
-.mark-unread {
+.article-actions {
   margin-left: auto;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.save-btn {
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 5px 10px;
+  border-radius: 6px;
+  border: 1px solid rgba(74, 109, 92, 0.4);
+  background: rgba(74, 109, 92, 0.09);
+  color: var(--research);
+  cursor: pointer;
+}
+.save-btn:hover {
+  background: rgba(74, 109, 92, 0.16);
 }
 .ghost {
   font: inherit;
@@ -468,6 +580,13 @@ body {
   font-size: 18px;
   line-height: 1.62;
   color: #2a323c;
+  overflow-wrap: break-word; /* wrap long URLs/tokens instead of overflowing the viewport */
+  word-break: break-word;
+}
+.prose table {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
 }
 .prose p {
   margin: 0 0 20px;
@@ -606,78 +725,93 @@ body {
   }
 }
 
-/* ---- mobile master-detail: list, then the reader slides in from the right ---- */
+/* ---- mobile: three full-screen levels that slide, nav → list → reader ---- */
 @media (max-width: 820px) {
   .app {
-    grid-template-columns: 1fr;
-    grid-template-rows: auto 1fr;
+    display: block;
     height: 100vh;
+    overflow: hidden;
+    position: relative;
+  }
+  .nav,
+  .list,
+  .reader {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    overflow-y: auto;
+    overflow-x: hidden;
+    border: none;
+    transition: transform 0.28s ease;
+    will-change: transform;
   }
   .nav {
-    border-right: none;
-    border-bottom: 1px solid var(--line);
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 8px 12px;
-    padding: 12px 14px;
-    overflow: visible;
-  }
-  .nav .brand {
-    padding: 0;
-    flex: 1 1 100%;
-  }
-  .lane-label {
-    display: none;
-  }
-  .nav-item {
-    width: auto;
+    transform: translateX(0);
+    z-index: 1;
+    padding: 16px 14px;
   }
   .list {
-    border-right: none;
-    overflow-y: auto;
-  }
-  .card-delete {
-    opacity: 1; /* no hover on touch */
-  }
-
-  /* Reader is a full-screen overlay that slides in when an item is selected. */
-  .reader {
-    position: fixed;
-    inset: 0;
-    grid-template-columns: 1fr;
-    grid-auto-rows: min-content;
     transform: translateX(100%);
-    transition: transform 0.28s ease;
-    z-index: 20;
+    z-index: 2;
+    background: var(--paper);
+    display: block;
+  }
+  .reader {
+    transform: translateX(100%);
+    z-index: 3;
+    display: block;
+  }
+  /* level 2: a saved view or feed is open */
+  .app.list-open .nav {
+    transform: translateX(-100%);
+  }
+  .app.list-open .list {
+    transform: translateX(0);
+  }
+  /* level 3: an item is open (reader on top; list parked to the left) */
+  .app.reading .list {
+    transform: translateX(-100%);
   }
   .app.reading .reader {
     transform: translateX(0);
   }
+
+  .card-delete {
+    opacity: 1; /* no hover affordance on touch */
+  }
+  .list-back,
   .reader-back {
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    position: sticky;
-    top: 0;
-    z-index: 2;
-    width: 100%;
     font: inherit;
     font-size: 13px;
     font-weight: 600;
     color: var(--accent);
-    background: var(--surface);
+    background: none;
     border: none;
+    padding: 4px 0 10px;
+    cursor: pointer;
+  }
+  .reader-back {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    width: 100%;
+    background: var(--surface);
     border-bottom: 1px solid var(--line);
     padding: 12px 16px;
-    cursor: pointer;
   }
   .side {
     border-left: none;
     border-top: 1px solid var(--line);
   }
   .article {
-    padding: 24px 20px 48px;
+    padding: 12px 18px 48px;
     max-width: none;
+  }
+  .article h1 {
+    font-size: 27px;
   }
 }

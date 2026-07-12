@@ -1,18 +1,20 @@
-"""Background job worker.
+"""Background job worker + feed scheduler.
 
-`process_job` is a pure-ish unit (inject extract/enrich) so tests drive it
-directly. `Worker` runs it in a daemon thread that polls the durable jobs table,
-started/stopped from the FastAPI lifespan. Single thread => the worker is a
-singleton, matching single-user load and the single uvicorn worker.
+`process_job` and `poll_feed` are pure-ish units (inject extract/enrich/resolve)
+so tests drive them directly. `Worker` runs them in a daemon thread that polls
+the durable jobs table and, on a cadence, polls due feeds and ages old feed
+items. Single thread => the worker is a singleton, matching single-user load.
 """
 from __future__ import annotations
 
 import sqlite3
 import threading
+import time
 
-from . import db, store
+from . import config, db, store
 from . import enrich as enrich_mod
 from . import extract as extract_mod
+from . import feedfetch
 
 
 def process_job(
@@ -47,17 +49,56 @@ def process_job(
         conn.commit()
 
 
+def poll_feed(conn: sqlite3.Connection, feed: sqlite3.Row, *, resolve=feedfetch.resolve_feed) -> dict:
+    """Fetch a feed and ingest new entries; records last_error on failure."""
+    try:
+        _url, parsed = resolve(feed["url"])
+        counts = store.ingest_entries(conn, feed["id"], parsed.title or feed["title"], parsed.entries)
+        if parsed.title and parsed.title != feed["title"]:
+            conn.execute(
+                "UPDATE feeds SET title = ?, site_url = COALESCE(site_url, ?) WHERE id = ?",
+                (parsed.title, parsed.site_url, feed["id"]),
+            )
+        store.mark_feed_polled(conn, feed["id"], None)
+        conn.commit()
+        return counts
+    except Exception as exc:  # noqa: BLE001 - a bad feed must not kill the worker
+        conn.rollback()
+        store.mark_feed_polled(conn, feed["id"], f"{exc.__class__.__name__}: {exc}")
+        conn.commit()
+        return {"eager": 0, "deferred": 0, "error": str(exc)}
+
+
 class Worker:
-    def __init__(self, db_path: str | None = None, poll: float = 1.0):
+    def __init__(self, db_path: str | None = None, poll: float = 1.0, maint_interval: float = 30.0):
         self.db_path = db_path
         self.poll = poll
+        self.maint_interval = maint_interval
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
+        self._last_age = 0.0
+
+    def _maintenance(self, conn: sqlite3.Connection) -> None:
+        for feed in store.feeds_due(conn, config.feed_poll_seconds()):
+            poll_feed(conn, feed)
+        now = time.monotonic()
+        if now - self._last_age >= config.feed_age_sweep_seconds():
+            store.age_feed_items(conn, config.feed_age_days())
+            conn.commit()
+            self._last_age = now
 
     def _run(self) -> None:
         conn = db.connect(self.db_path)
+        last_maint = 0.0
         try:
             while not self._stop.is_set():
+                now = time.monotonic()
+                if now - last_maint >= self.maint_interval:
+                    try:
+                        self._maintenance(conn)
+                    except Exception:  # noqa: BLE001 - maintenance must not kill the worker
+                        pass
+                    last_maint = now
                 job = store.claim_next_job(conn)
                 if job is None:
                     self._stop.wait(self.poll)
