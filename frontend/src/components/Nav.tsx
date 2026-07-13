@@ -1,16 +1,20 @@
 import { useState, type ReactNode } from "react";
-import type { Feed } from "../types";
+import type { Collection, Feed } from "../types";
 import { AddFeed } from "./AddFeed";
 
 interface Props {
-  view: "all" | "unread" | "feed";
+  view: "all" | "unread" | "feed" | "collection";
   feedId: number | null;
   feeds: Feed[];
+  collections: Collection[];
+  collectionId: number | null;
   unreadCount: number;
   savedCount: number;
   lensActive: boolean;
   onSelectSaved: (v: "all" | "unread") => void;
   onSelectFeed: (id: number) => void;
+  onSelectCollection: (id: number) => void;
+  onDeleteCollection: (id: number) => void;
   onSearch: () => void;
   onAddFeed: (url: string) => Promise<void>;
   onDeleteFeed: (id: number) => void;
@@ -21,17 +25,22 @@ export function Nav({
   view,
   feedId,
   feeds,
+  collections,
+  collectionId,
   unreadCount,
   savedCount,
   lensActive,
   onSelectSaved,
   onSelectFeed,
+  onSelectCollection,
+  onDeleteCollection,
   onSearch,
   onAddFeed,
   onDeleteFeed,
   captureSlot,
 }: Props) {
   const [confirmFeed, setConfirmFeed] = useState<number | null>(null);
+  const [confirmCol, setConfirmCol] = useState<number | null>(null);
   const isActive = (v: "all" | "unread") => !lensActive && view === v;
 
   return (
@@ -66,6 +75,45 @@ export function Nav({
         <span>Unread</span>
         {unreadCount > 0 && <span className="count unread">{unreadCount}</span>}
       </button>
+
+      {collections.length > 0 && <div className="lane-label">Research collections</div>}
+      {collections.map((c) => {
+        const active = !lensActive && view === "collection" && collectionId === c.id;
+        return (
+          <div key={c.id} className={`nav-feed nav-sub ${active ? "active" : ""}`}>
+            <button className="nav-item nav-feed-open" onClick={() => onSelectCollection(c.id)} aria-current={active}>
+              <span className="dot research" aria-hidden="true" />
+              <span className="nav-feed-title">{c.name}</span>
+              <span className="count">{c.item_count}</span>
+            </button>
+            {confirmCol === c.id ? (
+              <span className="feed-confirm">
+                <button
+                  className="danger"
+                  onClick={() => {
+                    onDeleteCollection(c.id);
+                    setConfirmCol(null);
+                  }}
+                >
+                  Delete
+                </button>
+                <button className="ghost-sm" onClick={() => setConfirmCol(null)}>
+                  Cancel
+                </button>
+              </span>
+            ) : (
+              <button
+                className="nav-feed-remove"
+                aria-label={`Delete collection ${c.name}`}
+                title="Delete collection"
+                onClick={() => setConfirmCol(c.id)}
+              >
+                ×
+              </button>
+            )}
+          </div>
+        );
+      })}
 
       <div className="lane-label feeds-label">
         <span>Feeds</span>

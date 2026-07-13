@@ -904,3 +904,114 @@ body {
     font-size: 27px;
   }
 }
+
+/* ---- collections ---- */
+.nav-sub {
+  padding-left: 8px;
+}
+.dot.research {
+  background: var(--research);
+}
+.savecoll {
+  margin-top: 10px;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--research);
+  background: rgba(74, 109, 92, 0.09);
+  border: 1px solid rgba(74, 109, 92, 0.3);
+  border-radius: 6px;
+  padding: 5px 10px;
+  cursor: pointer;
+}
+.savecoll:hover {
+  background: rgba(74, 109, 92, 0.16);
+}
+.savecoll-form {
+  margin-top: 10px;
+}
+.savecoll-form input {
+  width: 100%;
+  font: inherit;
+  font-size: 13px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--surface);
+  outline: none;
+}
+.savecoll-form input:focus {
+  border-color: var(--research);
+  box-shadow: 0 0 0 3px rgba(74, 109, 92, 0.12);
+}
+
+/* add-to-collection popover in the reader */
+.collpick {
+  position: relative;
+}
+.collpick-pop {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 10;
+  min-width: 220px;
+  max-height: 320px;
+  overflow-y: auto;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.12);
+  padding: 6px;
+}
+.collpick-empty {
+  padding: 8px 10px;
+  font-size: 12.5px;
+}
+.collpick-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  background: none;
+  border: none;
+  border-radius: 6px;
+  padding: 7px 8px;
+  cursor: pointer;
+  color: var(--ink);
+}
+.collpick-item:hover {
+  background: rgba(0, 0, 0, 0.04);
+}
+.collpick-item.on {
+  color: var(--research);
+  font-weight: 600;
+}
+.collpick-item .check {
+  width: 14px;
+  color: var(--research);
+}
+.collpick-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.collpick-new {
+  border-top: 1px solid var(--line-soft);
+  margin-top: 4px;
+  padding-top: 6px;
+}
+.collpick-new input {
+  width: 100%;
+  font: inherit;
+  font-size: 13px;
+  padding: 7px 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  outline: none;
+}
+.collpick-new input:focus {
+  border-color: var(--research);
+}

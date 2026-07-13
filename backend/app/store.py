@@ -67,6 +67,12 @@ def get_item(conn: sqlite3.Connection, item_id: int) -> dict | None:
             "SELECT text FROM claims WHERE item_id = ? ORDER BY position", (item_id,)
         )
     ]
+    item["collection_ids"] = [
+        r["collection_id"]
+        for r in conn.execute(
+            "SELECT collection_id FROM item_collections WHERE item_id = ?", (item_id,)
+        )
+    ]
     return item
 
 
@@ -367,3 +373,63 @@ def apply_enrichment(conn: sqlite3.Connection, item_id: int, result: EnrichResul
             "INSERT INTO claims (item_id, text, position) VALUES (?, ?, ?)",
             (item_id, claim, pos),
         )
+
+
+# ------------------------------------------------------------ collections ----
+def create_collection(
+    conn: sqlite3.Connection, name: str, query: str | None = None, item_ids: list[int] | None = None
+) -> int:
+    cur = conn.execute("INSERT INTO collections (name, query) VALUES (?, ?)", (name, query))
+    cid = cur.lastrowid
+    for item_id in item_ids or []:
+        add_item_to_collection(conn, cid, item_id)
+    return cid
+
+
+def get_collection(conn: sqlite3.Connection, cid: int) -> sqlite3.Row | None:
+    return conn.execute(
+        "SELECT id, name, query, created_at FROM collections WHERE id = ?", (cid,)
+    ).fetchone()
+
+
+def list_collections(conn: sqlite3.Connection) -> list[dict]:
+    rows = conn.execute(
+        "SELECT id, name, query, created_at, "
+        "(SELECT COUNT(*) FROM item_collections ic WHERE ic.collection_id = collections.id) AS item_count "
+        "FROM collections ORDER BY created_at DESC, id DESC"
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def delete_collection(conn: sqlite3.Connection, cid: int) -> bool:
+    cur = conn.execute("DELETE FROM collections WHERE id = ?", (cid,))
+    return cur.rowcount > 0
+
+
+def add_item_to_collection(conn: sqlite3.Connection, cid: int, item_id: int) -> bool:
+    if conn.execute("SELECT 1 FROM collections WHERE id = ?", (cid,)).fetchone() is None:
+        return False
+    if conn.execute("SELECT 1 FROM items WHERE id = ?", (item_id,)).fetchone() is None:
+        return False
+    conn.execute(
+        "INSERT OR IGNORE INTO item_collections (collection_id, item_id) VALUES (?, ?)", (cid, item_id)
+    )
+    return True
+
+
+def remove_item_from_collection(conn: sqlite3.Connection, cid: int, item_id: int) -> bool:
+    cur = conn.execute(
+        "DELETE FROM item_collections WHERE collection_id = ? AND item_id = ?", (cid, item_id)
+    )
+    return cur.rowcount > 0
+
+
+def collection_items(conn: sqlite3.Connection, cid: int) -> list[dict]:
+    """Member items (cross-lane), most-recently-added first."""
+    rows = conn.execute(
+        f"SELECT {_LIST_COLS} FROM items i "
+        "JOIN item_collections ic ON ic.item_id = i.id "
+        "WHERE ic.collection_id = ? ORDER BY ic.added_at DESC, i.id DESC",
+        (cid,),
+    ).fetchall()
+    return [_item_dict(r) for r in rows]
