@@ -19,6 +19,12 @@ vi.mock("../api", () => ({
     feeds: vi.fn(),
     addFeed: vi.fn(),
     removeFeed: vi.fn(),
+    collections: vi.fn(),
+    getCollection: vi.fn(),
+    createCollection: vi.fn(),
+    removeCollection: vi.fn(),
+    addToCollection: vi.fn(),
+    removeFromCollection: vi.fn(),
   },
 }));
 
@@ -27,6 +33,7 @@ const mockApi = api as unknown as Record<string, ReturnType<typeof vi.fn>>;
 beforeEach(() => {
   vi.clearAllMocks();
   mockApi.feeds.mockResolvedValue({ feeds: [] });
+  mockApi.collections.mockResolvedValue({ collections: [] });
 });
 
 describe("App", () => {
@@ -103,6 +110,28 @@ describe("App", () => {
     expect(await screen.findByText(/reading about/i)).toBeInTheDocument();
     expect(await screen.findByRole("button", { name: "Saved AI piece" })).toBeInTheDocument();
     expect(await screen.findByRole("button", { name: "Feed AI piece" })).toBeInTheDocument();
+  });
+
+  it("saves a lens as a collection", async () => {
+    mockApi.list.mockResolvedValue({ items: [], unread_count: 0 });
+    mockApi.lens.mockResolvedValue({
+      query: "AI",
+      items: [summary({ id: 1, lane: "saved" }), summary({ id: 2, lane: "feed" })],
+      saved_count: 1,
+      feed_count: 1,
+    });
+    mockApi.createCollection.mockResolvedValue({ collection: { id: 8, name: "AI", query: "AI", item_count: 2 } });
+    mockApi.getCollection.mockResolvedValue({ collection: { id: 8, name: "AI", query: "AI", item_count: 2 }, items: [] });
+
+    render(<App />);
+    await screen.findByText(/library is empty/i);
+    await userEvent.type(screen.getByLabelText(/search your library/i), "AI");
+    await waitFor(() => expect(mockApi.lens).toHaveBeenCalledWith("AI"));
+
+    await userEvent.click(await screen.findByRole("button", { name: /save as collection/i }));
+    await userEvent.click(screen.getByRole("button", { name: /^save$/i }));
+
+    await waitFor(() => expect(mockApi.createCollection).toHaveBeenCalledWith("AI", "AI", [1, 2]));
   });
 
   it("adds a feed, shows it in the nav, and opens its items", async () => {

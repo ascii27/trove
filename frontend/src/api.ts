@@ -1,4 +1,4 @@
-import type { Feed, ItemFull, ItemSummary } from "./types";
+import type { Collection, Feed, ItemFull, ItemSummary } from "./types";
 
 async function req<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(path, {
@@ -62,4 +62,21 @@ export const api = {
   addFeed: (url: string) =>
     req<AddFeedResponse>("/api/feeds", { method: "POST", body: JSON.stringify({ url }) }),
   removeFeed: (id: number) => req<{ deleted: boolean }>(`/api/feeds/${id}`, { method: "DELETE" }),
+
+  collections: () => req<{ collections: Collection[] }>("/api/collections"),
+  getCollection: (id: number) =>
+    req<{ collection: Collection; items: ItemSummary[] }>(`/api/collections/${id}`),
+  createCollection: (name: string, query: string | null, itemIds: number[]) =>
+    req<{ collection: Collection }>("/api/collections", {
+      method: "POST",
+      body: JSON.stringify({ name, query, item_ids: itemIds }),
+    }),
+  removeCollection: (id: number) => req<{ deleted: boolean }>(`/api/collections/${id}`, { method: "DELETE" }),
+  addToCollection: (cid: number, itemId: number) =>
+    req<{ collection: Collection }>(`/api/collections/${cid}/items`, {
+      method: "POST",
+      body: JSON.stringify({ item_id: itemId }),
+    }),
+  removeFromCollection: (cid: number, itemId: number) =>
+    req<{ collection: Collection }>(`/api/collections/${cid}/items/${itemId}`, { method: "DELETE" }),
 };
