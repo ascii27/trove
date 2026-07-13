@@ -810,52 +810,34 @@ body {
   .app {
     display: block;
     height: 100vh;
+    height: 100dvh; /* shrinks with the iOS keyboard/URL bar so inputs stay in view */
     overflow: hidden;
-    position: relative;
   }
+  /* Show exactly one full-screen level at a time. No off-screen (translated)
+     panes — iOS shifts toward off-screen content when focusing an input and
+     raising the keyboard, which caused the "view slides right" bug. */
   .nav,
   .list,
   .reader {
-    position: absolute;
-    inset: 0;
+    display: none;
     width: 100%;
     height: 100%;
     overflow-y: auto;
     overflow-x: hidden;
     border: none;
-    transition: transform 0.28s ease;
-    will-change: transform;
+    background: var(--paper);
   }
   .nav {
-    transform: translateX(0);
-    z-index: 1;
     padding: 16px 14px;
   }
-  .list {
-    transform: translateX(100%);
-    z-index: 2;
-    background: var(--paper);
-    display: block;
+  .app:not(.list-open):not(.reading) .nav {
+    display: block; /* level 1: menu */
   }
-  .reader {
-    transform: translateX(100%);
-    z-index: 3;
-    display: block;
-  }
-  /* level 2: a saved view or feed is open */
-  .app.list-open .nav {
-    transform: translateX(-100%);
-  }
-  .app.list-open .list {
-    transform: translateX(0);
-  }
-  /* level 3: an item is open (reader on top; nav + list parked to the left) */
-  .app.reading .nav,
-  .app.reading .list {
-    transform: translateX(-100%);
+  .app.list-open:not(.reading) .list {
+    display: block; /* level 2: a saved view / feed / collection */
   }
   .app.reading .reader {
-    transform: translateX(0);
+    display: block; /* level 3: the article (article + side stack as block flow) */
   }
 
   /* iOS zooms in when focusing an input under 16px, which then lets the page
