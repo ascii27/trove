@@ -997,3 +997,56 @@ body {
 .collpick-new input:focus {
   border-color: var(--research);
 }
+
+/* ---- highlights ---- */
+.prose ::selection {
+  background: #fdeaa0;
+}
+.prose mark.hl {
+  background: #fdeaa0;
+  color: inherit;
+  border-radius: 2px;
+  padding: 0 1px;
+  cursor: pointer;
+}
+
+/* floating popover anchored to a text selection or a tapped highlight */
+.hl-pop {
+  position: fixed;
+  z-index: 30;
+  transform: translate(-50%, -100%);
+}
+.hl-pop button {
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  padding: 7px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.18);
+  cursor: pointer;
+}
+.hl-pop button:hover {
+  background: rgba(0, 0, 0, 0.04);
+}
+.hl-pop button.danger {
+  color: #b23b3b;
+}
+
+/* highlights archive cards */
+.quote-card .quote {
+  font-family: var(--serif);
+  font-size: 15.5px;
+  line-height: 1.5;
+  margin: 0 0 8px;
+  padding-left: 12px;
+  border-left: 3px solid #fdeaa0;
+  color: var(--ink);
+}
+.quote-card .quote-source {
+  font-weight: 600;
+  color: var(--ink);
+}

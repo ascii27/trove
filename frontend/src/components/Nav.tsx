@@ -3,7 +3,7 @@ import type { Collection, Feed } from "../types";
 import { AddFeed } from "./AddFeed";
 
 interface Props {
-  view: "all" | "unread" | "feed" | "collection";
+  view: "all" | "unread" | "feed" | "collection" | "highlights";
   feedId: number | null;
   feeds: Feed[];
   collections: Collection[];
@@ -15,6 +15,8 @@ interface Props {
   onSelectFeed: (id: number) => void;
   onSelectCollection: (id: number) => void;
   onDeleteCollection: (id: number) => void;
+  onSelectHighlights: () => void;
+  highlightCount: number;
   onSearch: () => void;
   onAddFeed: (url: string) => Promise<void>;
   onDeleteFeed: (id: number) => void;
@@ -34,6 +36,8 @@ export function Nav({
   onSelectFeed,
   onSelectCollection,
   onDeleteCollection,
+  onSelectHighlights,
+  highlightCount,
   onSearch,
   onAddFeed,
   onDeleteFeed,
@@ -74,6 +78,14 @@ export function Nav({
       >
         <span>Unread</span>
         {unreadCount > 0 && <span className="count unread">{unreadCount}</span>}
+      </button>
+      <button
+        className={`nav-item ${!lensActive && view === "highlights" ? "active" : ""}`}
+        onClick={onSelectHighlights}
+        aria-current={!lensActive && view === "highlights"}
+      >
+        <span>Highlights</span>
+        {highlightCount > 0 && <span className="count">{highlightCount}</span>}
       </button>
 
       {collections.length > 0 && <div className="lane-label">Research collections</div>}

@@ -3,10 +3,18 @@ import { api, type LensResponse } from "./api";
 import { Capture } from "./components/Capture";
 import { Nav } from "./components/Nav";
 import { List } from "./components/List";
+import { HighlightsList } from "./components/HighlightsList";
 import { Reader } from "./components/Reader";
-import { isPending, type Collection, type Feed, type ItemFull, type ItemSummary } from "./types";
+import {
+  isPending,
+  type Collection,
+  type Feed,
+  type HighlightArchiveEntry,
+  type ItemFull,
+  type ItemSummary,
+} from "./types";
 
-type View = "all" | "unread" | "feed" | "collection";
+type View = "all" | "unread" | "feed" | "collection" | "highlights";
 
 export default function App() {
   const [view, setView] = useState<View>("all");
@@ -15,6 +23,7 @@ export default function App() {
   const [collections, setCollections] = useState<Collection[]>([]);
   const [collectionId, setCollectionId] = useState<number | null>(null);
   const [collectionName, setCollectionName] = useState<string>("");
+  const [highlightsArchive, setHighlightsArchive] = useState<HighlightArchiveEntry[]>([]);
   const [items, setItems] = useState<ItemSummary[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [selectedId, setSelectedId] = useState<number | null>(null);
@@ -41,6 +50,14 @@ export default function App() {
   const loadCollections = useCallback(async () => {
     try {
       setCollections((await api.collections()).collections);
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  const loadHighlights = useCallback(async () => {
+    try {
+      setHighlightsArchive((await api.highlights()).highlights);
     } catch {
       /* ignore */
     }
@@ -91,11 +108,16 @@ export default function App() {
   useEffect(() => {
     loadFeeds();
     loadCollections();
-  }, [loadFeeds, loadCollections]);
+    loadHighlights();
+  }, [loadFeeds, loadCollections, loadHighlights]);
   useEffect(() => {
     setLoaded(false);
-    loadCurrent(view, feedId, collectionId);
-  }, [view, feedId, collectionId, loadCurrent]);
+    if (view === "highlights") {
+      loadHighlights().then(() => setLoaded(true));
+    } else {
+      loadCurrent(view, feedId, collectionId);
+    }
+  }, [view, feedId, collectionId, loadCurrent, loadHighlights]);
 
   // Poll while anything visible is still extracting/enriching.
   const anyPending = items.some(isPending) || (selected != null && isPending(selected));
@@ -301,6 +323,34 @@ export default function App() {
     [loadCollections]
   );
 
+  // --- highlights ---
+  const onAddHighlight = useCallback(
+    async (itemId: number, sel: { quote: string; start: number; end: number }) => {
+      await api.addHighlight(itemId, sel);
+      setSelected((await api.get(itemId)).item); // refetch → reader repaints the new mark
+      loadHighlights();
+    },
+    [loadHighlights]
+  );
+
+  const onRemoveHighlight = useCallback(
+    async (hid: number) => {
+      await api.removeHighlight(hid);
+      const cur = selectedRef.current;
+      if (cur) setSelected((await api.get(cur.id)).item);
+      loadHighlights();
+    },
+    [loadHighlights]
+  );
+
+  const onSelectHighlights = useCallback(() => {
+    setView("highlights");
+    setFeedId(null);
+    setCollectionId(null);
+    setListOpen(true);
+    setLensQuery("");
+  }, []);
+
   // onCapture opens a reader item; make sure the mobile list is "entered" too.
   useEffect(() => {
     if (selectedId != null) setListOpen(true);
@@ -336,34 +386,47 @@ export default function App() {
         }}
         onSelectCollection={onSelectCollection}
         onDeleteCollection={onDeleteCollection}
+        onSelectHighlights={onSelectHighlights}
+        highlightCount={highlightsArchive.length}
         onSearch={onSearch}
         onAddFeed={onAddFeed}
         onDeleteFeed={onDeleteFeed}
         captureSlot={<Capture onCapture={onCapture} />}
       />
-      <List
-        items={displayItems}
-        view={view}
-        feedTitle={view === "feed" ? feeds.find((f) => f.id === feedId)?.title ?? "Feed" : null}
-        collectionInfo={collectionInfo}
-        loaded={loaded}
-        selectedId={selectedId}
-        notice={notice}
-        error={error}
-        lensQuery={lensQuery}
-        onLensChange={setLensQuery}
-        lensFocusTick={lensFocusTick}
-        lensInfo={
-          lensActive
-            ? { savedCount: lensResults?.saved_count ?? 0, feedCount: lensResults?.feed_count ?? 0 }
-            : null
-        }
-        onSaveAsCollection={onSaveCollection}
-        onSelect={openItem}
-        onDelete={onDelete}
-        onRemoveFromCollection={onRemoveFromCollection}
-        onBackToNav={onBackToNav}
-      />
+      {view === "highlights" ? (
+        <HighlightsList
+          highlights={highlightsArchive}
+          loaded={loaded}
+          selectedItemId={selectedId}
+          onOpen={openItem}
+          onRemove={onRemoveHighlight}
+          onBackToNav={onBackToNav}
+        />
+      ) : (
+        <List
+          items={displayItems}
+          view={view}
+          feedTitle={view === "feed" ? feeds.find((f) => f.id === feedId)?.title ?? "Feed" : null}
+          collectionInfo={collectionInfo}
+          loaded={loaded}
+          selectedId={selectedId}
+          notice={notice}
+          error={error}
+          lensQuery={lensQuery}
+          onLensChange={setLensQuery}
+          lensFocusTick={lensFocusTick}
+          lensInfo={
+            lensActive
+              ? { savedCount: lensResults?.saved_count ?? 0, feedCount: lensResults?.feed_count ?? 0 }
+              : null
+          }
+          onSaveAsCollection={onSaveCollection}
+          onSelect={openItem}
+          onDelete={onDelete}
+          onRemoveFromCollection={onRemoveFromCollection}
+          onBackToNav={onBackToNav}
+        />
+      )}
       <Reader
         item={selected}
         highlightTopics={matchedTopics}
@@ -374,6 +437,8 @@ export default function App() {
         onSave={onSave}
         onToggleCollection={onToggleCollection}
         onCreateCollectionForItem={onCreateCollectionForItem}
+        onAddHighlight={onAddHighlight}
+        onRemoveHighlight={onRemoveHighlight}
       />
     </div>
   );

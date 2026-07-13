@@ -44,6 +44,7 @@ export function full(over: Partial<ItemFull> = {}): ItemFull {
     topics: ["AI", "platform engineering"],
     claims: ["Mandated platforms rot.", "Cognitive load predicts uptake."],
     collection_ids: [],
+    highlights: [],
     ...over,
   };
 }

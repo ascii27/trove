@@ -1,4 +1,4 @@
-import type { Collection, Feed, ItemFull, ItemSummary } from "./types";
+import type { Collection, Feed, Highlight, HighlightArchiveEntry, ItemFull, ItemSummary } from "./types";
 
 async function req<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(path, {
@@ -79,4 +79,13 @@ export const api = {
     }),
   removeFromCollection: (cid: number, itemId: number) =>
     req<{ collection: Collection }>(`/api/collections/${cid}/items/${itemId}`, { method: "DELETE" }),
+
+  highlights: () => req<{ highlights: HighlightArchiveEntry[] }>("/api/highlights"),
+  addHighlight: (itemId: number, sel: { quote: string; start: number; end: number }) =>
+    req<{ highlight: Highlight }>(`/api/items/${itemId}/highlights`, {
+      method: "POST",
+      body: JSON.stringify(sel),
+    }),
+  removeHighlight: (hid: number) =>
+    req<{ deleted: boolean }>(`/api/highlights/${hid}`, { method: "DELETE" }),
 };
