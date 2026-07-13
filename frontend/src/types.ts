@@ -39,6 +39,14 @@ export interface ItemFull extends ItemSummary {
   content_text: string | null;
   topics: string[];
   claims: string[];
+  collection_ids: number[];
+}
+
+export interface Collection {
+  id: number;
+  name: string;
+  query: string | null;
+  item_count: number;
 }
 
 /** True while an item is actively being fetched/extracted/enriched — drives polling.

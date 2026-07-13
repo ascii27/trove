@@ -11,7 +11,9 @@ A personal read-later, research, and feed-reading tool (self-hosted, single user
 
 - **Phase 2b (Lens)** — the "read about X" query surface: a live query bar expands an interest into related terms (`lens.py`) and scores every non-archived item across **both lanes** — normalized topics weighted highest, then title/summary/claims/category — returning ranked, cross-lane results tagged Saved/Feed with matched topics highlighted in the reader. Keyword + topic + metadata matching (no embeddings). `GET /api/lens?q=…`. Ephemeral; "save as collection" is 2c.
 
-Still to come: **2c** research collections (persist a lens), **3** cross-source synthesis. The `lane` column, durable `jobs` worker, and canonical `topics` table were built in Phase 1 so these extend rather than rewrite.
+- **Phase 2c (Collections)** — persist a lens as a durable research collection: a curated, revisitable set of items (an item can belong to several). Two new tables (`collections`, `item_collections`). "Save as collection" from an active lens snapshots its results in; the reader's "Add to collection" popover toggles membership and creates new collections; a Research-collections group nests under Saved. `POST/GET/DELETE /api/collections`, add/remove item endpoints; item detail carries `collection_ids`. The saved `query` is stored for a future "refresh from lens."
+
+Still to come: **3** cross-source synthesis (per-collection consensus/contradictions/gaps). The `lane` column, durable `jobs` worker, and canonical `topics` table were built in Phase 1 so these extend rather than rewrite.
 
 Full design + rationale: `~/.claude/plans/staged-noodling-sparkle.md`. Product spec (external): `~/Downloads/files/trove-prd.md`; IA mockup: `~/Downloads/files/reader-ia-mockup.html`.
 

@@ -1,14 +1,18 @@
 import type { ReactNode } from "react";
 import { renderMarkdown } from "../render";
-import type { ItemFull } from "../types";
+import type { Collection, ItemFull } from "../types";
+import { CollectionPicker } from "./CollectionPicker";
 
 interface Props {
   item: ItemFull | null;
   highlightTopics: string[];
+  collections: Collection[];
   onMarkUnread: (id: number) => void;
   onRetry: (id: number) => void;
   onBack: () => void;
   onSave: (id: number) => void;
+  onToggleCollection: (collectionId: number, itemId: number, isMember: boolean) => void;
+  onCreateCollectionForItem: (name: string, itemId: number) => void;
 }
 
 const SOURCE_LABEL: Record<string, string> = {
@@ -83,7 +87,17 @@ function MetaPanel({ item, highlightTopics }: { item: ItemFull; highlightTopics:
   );
 }
 
-export function Reader({ item, highlightTopics, onMarkUnread, onRetry, onBack, onSave }: Props) {
+export function Reader({
+  item,
+  highlightTopics,
+  collections,
+  onMarkUnread,
+  onRetry,
+  onBack,
+  onSave,
+  onToggleCollection,
+  onCreateCollectionForItem,
+}: Props) {
   let content: ReactNode;
 
   if (!item) {
@@ -120,6 +134,12 @@ export function Reader({ item, highlightTopics, onMarkUnread, onRetry, onBack, o
                   Save to library
                 </button>
               )}
+              <CollectionPicker
+                collections={collections}
+                memberIds={item.collection_ids}
+                onToggle={(cid, isMember) => onToggleCollection(cid, item.id, isMember)}
+                onCreate={(name) => onCreateCollectionForItem(name, item.id)}
+              />
               <button className="ghost mark-unread" onClick={() => onMarkUnread(item.id)}>
                 Mark unread
               </button>

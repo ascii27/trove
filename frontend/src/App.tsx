@@ -4,14 +4,17 @@ import { Capture } from "./components/Capture";
 import { Nav } from "./components/Nav";
 import { List } from "./components/List";
 import { Reader } from "./components/Reader";
-import { isPending, type Feed, type ItemFull, type ItemSummary } from "./types";
+import { isPending, type Collection, type Feed, type ItemFull, type ItemSummary } from "./types";
 
-type View = "all" | "unread" | "feed";
+type View = "all" | "unread" | "feed" | "collection";
 
 export default function App() {
   const [view, setView] = useState<View>("all");
   const [feedId, setFeedId] = useState<number | null>(null);
   const [feeds, setFeeds] = useState<Feed[]>([]);
+  const [collections, setCollections] = useState<Collection[]>([]);
+  const [collectionId, setCollectionId] = useState<number | null>(null);
+  const [collectionName, setCollectionName] = useState<string>("");
   const [items, setItems] = useState<ItemSummary[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [selectedId, setSelectedId] = useState<number | null>(null);
@@ -35,16 +38,38 @@ export default function App() {
     }
   }, []);
 
-  const loadList = useCallback(async (v: View, fid: number | null) => {
+  const loadCollections = useCallback(async () => {
     try {
-      const res = await api.list(v, fid ?? undefined);
-      setItems(res.items);
-      setUnreadCount(res.unread_count);
-      setLoaded(true);
-    } catch (e) {
-      setError((e as Error).message);
+      setCollections((await api.collections()).collections);
+    } catch {
+      /* ignore */
     }
   }, []);
+
+  const loadCurrent = useCallback(
+    async (v: View, fid: number | null, cid: number | null) => {
+      try {
+        if (v === "collection" && cid != null) {
+          const res = await api.getCollection(cid);
+          setItems(res.items);
+          setCollectionName(res.collection.name);
+        } else {
+          const res = await api.list(v as "all" | "unread" | "feed", fid ?? undefined);
+          setItems(res.items);
+          setUnreadCount(res.unread_count);
+        }
+        setLoaded(true);
+      } catch (e) {
+        setError((e as Error).message);
+      }
+    },
+    []
+  );
+
+  const reloadCurrent = useCallback(
+    () => loadCurrent(view, feedId, collectionId),
+    [loadCurrent, view, feedId, collectionId]
+  );
 
   // Debounced lens query. Empty query → no lens (show the current view).
   useEffect(() => {
@@ -65,11 +90,12 @@ export default function App() {
 
   useEffect(() => {
     loadFeeds();
-  }, [loadFeeds]);
+    loadCollections();
+  }, [loadFeeds, loadCollections]);
   useEffect(() => {
     setLoaded(false);
-    loadList(view, feedId);
-  }, [view, feedId, loadList]);
+    loadCurrent(view, feedId, collectionId);
+  }, [view, feedId, collectionId, loadCurrent]);
 
   // Poll while anything visible is still extracting/enriching.
   const anyPending = items.some(isPending) || (selected != null && isPending(selected));
@@ -78,7 +104,7 @@ export default function App() {
   useEffect(() => {
     if (!anyPending) return;
     const id = setInterval(async () => {
-      await loadList(view, feedId);
+      await reloadCurrent();
       await loadFeeds();
       const cur = selectedRef.current;
       if (cur && isPending(cur)) {
@@ -90,7 +116,7 @@ export default function App() {
       }
     }, 2500);
     return () => clearInterval(id);
-  }, [anyPending, view, feedId, loadList, loadFeeds]);
+  }, [anyPending, reloadCurrent, loadFeeds]);
 
   const openItem = useCallback(
     async (id: number) => {
@@ -129,11 +155,11 @@ export default function App() {
       const res = await api.capture(url);
       setView("all");
       setFeedId(null);
-      await loadList("all", null);
+      await loadCurrent("all", null, null);
       if (res.duplicate) setNotice("You've already saved that — here it is.");
       openItem(res.item.id);
     },
-    [loadList, openItem]
+    [loadCurrent, openItem]
   );
 
   const onAddFeed = useCallback(
@@ -174,9 +200,9 @@ export default function App() {
     async (id: number) => {
       const { item } = await api.retry(id);
       setSelected(item);
-      await loadList(view, feedId);
+      await reloadCurrent();
     },
-    [view, feedId, loadList]
+    [reloadCurrent]
   );
 
   const onSave = useCallback(
@@ -184,10 +210,10 @@ export default function App() {
       const { item } = await api.save(id);
       setSelected(item);
       setNotice("Saved to your library.");
-      await loadList(view, feedId);
+      await reloadCurrent();
       loadFeeds();
     },
-    [view, feedId, loadList, loadFeeds]
+    [reloadCurrent, loadFeeds]
   );
 
   const onDelete = useCallback(
@@ -196,10 +222,10 @@ export default function App() {
       setItems((prev) => prev.filter((i) => i.id !== id));
       setSelectedId((cur) => (cur === id ? null : cur));
       setSelected((cur) => (cur && cur.id === id ? null : cur));
-      await loadList(view, feedId);
+      await reloadCurrent();
       loadFeeds();
     },
-    [view, feedId, loadList, loadFeeds]
+    [reloadCurrent, loadFeeds]
   );
 
   const onBack = useCallback(() => {
@@ -213,6 +239,68 @@ export default function App() {
     setSelected(null);
   }, []);
 
+  // --- collections ---
+  const onSelectCollection = useCallback((id: number) => {
+    setView("collection");
+    setCollectionId(id);
+    setListOpen(true);
+    setLensQuery("");
+  }, []);
+
+  const onSaveCollection = useCallback(
+    async (name: string) => {
+      const ids = (lensResults?.items ?? []).map((i) => i.id);
+      const res = await api.createCollection(name, lensQuery.trim() || null, ids);
+      await loadCollections();
+      setLensQuery(""); // exit the lens
+      setNotice(`Saved “${res.collection.name}” with ${res.collection.item_count} sources.`);
+      setView("collection");
+      setCollectionId(res.collection.id);
+    },
+    [lensResults, lensQuery, loadCollections]
+  );
+
+  const onDeleteCollection = useCallback(
+    async (id: number) => {
+      await api.removeCollection(id);
+      await loadCollections();
+      if (view === "collection" && collectionId === id) {
+        setView("all");
+        setCollectionId(null);
+      }
+    },
+    [view, collectionId, loadCollections]
+  );
+
+  const onRemoveFromCollection = useCallback(
+    async (cid: number, itemId: number) => {
+      await api.removeFromCollection(cid, itemId);
+      setItems((prev) => prev.filter((i) => i.id !== itemId));
+      loadCollections();
+    },
+    [loadCollections]
+  );
+
+  // Reader "add to collection" popover toggles + create-new.
+  const onToggleCollection = useCallback(
+    async (cid: number, itemId: number, isMember: boolean) => {
+      if (isMember) await api.removeFromCollection(cid, itemId);
+      else await api.addToCollection(cid, itemId);
+      setSelected((await api.get(itemId)).item);
+      loadCollections();
+    },
+    [loadCollections]
+  );
+
+  const onCreateCollectionForItem = useCallback(
+    async (name: string, itemId: number) => {
+      await api.createCollection(name, null, [itemId]);
+      setSelected((await api.get(itemId)).item);
+      loadCollections();
+    },
+    [loadCollections]
+  );
+
   // onCapture opens a reader item; make sure the mobile list is "entered" too.
   useEffect(() => {
     if (selectedId != null) setListOpen(true);
@@ -220,6 +308,10 @@ export default function App() {
 
   const lensActive = lensQuery.trim() !== "";
   const displayItems = lensActive ? lensResults?.items ?? [] : items;
+  const collectionInfo =
+    view === "collection" && collectionId != null
+      ? { id: collectionId, name: collectionName, count: items.length }
+      : null;
 
   return (
     <div className={`app${listOpen ? " list-open" : ""}${selectedId != null ? " reading" : ""}`}>
@@ -227,6 +319,8 @@ export default function App() {
         view={view}
         feedId={feedId}
         feeds={feeds}
+        collections={collections}
+        collectionId={collectionId}
         unreadCount={unreadCount}
         lensActive={lensActive}
         savedCount={view === "feed" ? feeds.find((f) => f.id === feedId)?.unread_count ?? 0 : items.length}
@@ -240,6 +334,8 @@ export default function App() {
           setFeedId(id);
           setListOpen(true);
         }}
+        onSelectCollection={onSelectCollection}
+        onDeleteCollection={onDeleteCollection}
         onSearch={onSearch}
         onAddFeed={onAddFeed}
         onDeleteFeed={onDeleteFeed}
@@ -249,6 +345,7 @@ export default function App() {
         items={displayItems}
         view={view}
         feedTitle={view === "feed" ? feeds.find((f) => f.id === feedId)?.title ?? "Feed" : null}
+        collectionInfo={collectionInfo}
         loaded={loaded}
         selectedId={selectedId}
         notice={notice}
@@ -261,17 +358,22 @@ export default function App() {
             ? { savedCount: lensResults?.saved_count ?? 0, feedCount: lensResults?.feed_count ?? 0 }
             : null
         }
+        onSaveAsCollection={onSaveCollection}
         onSelect={openItem}
         onDelete={onDelete}
+        onRemoveFromCollection={onRemoveFromCollection}
         onBackToNav={onBackToNav}
       />
       <Reader
         item={selected}
         highlightTopics={matchedTopics}
+        collections={collections}
         onMarkUnread={onMarkUnread}
         onRetry={onRetry}
         onBack={onBack}
         onSave={onSave}
+        onToggleCollection={onToggleCollection}
+        onCreateCollectionForItem={onCreateCollectionForItem}
       />
     </div>
   );

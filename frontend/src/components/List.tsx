@@ -4,8 +4,9 @@ import { LensBar } from "./LensBar";
 
 interface Props {
   items: ItemSummary[];
-  view: "all" | "unread" | "feed";
+  view: "all" | "unread" | "feed" | "collection";
   feedTitle: string | null;
+  collectionInfo: { id: number; name: string; count: number } | null;
   loaded: boolean;
   selectedId: number | null;
   notice: string | null;
@@ -14,8 +15,10 @@ interface Props {
   onLensChange: (q: string) => void;
   lensFocusTick: number;
   lensInfo: { savedCount: number; feedCount: number } | null;
+  onSaveAsCollection: (name: string) => Promise<void>;
   onSelect: (id: number) => void;
   onDelete: (id: number) => void;
+  onRemoveFromCollection: (collectionId: number, itemId: number) => void;
   onBackToNav: () => void;
 }
 
@@ -50,10 +53,58 @@ const TrashIcon = () => (
   </svg>
 );
 
+/** The "＋ Save as collection" control shown while a lens is active. */
+function SaveAsCollection({ defaultName, onSave }: { defaultName: string; onSave: (name: string) => Promise<void> }) {
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState(defaultName);
+  const [busy, setBusy] = useState(false);
+
+  if (!open) {
+    return (
+      <button
+        className="savecoll"
+        onClick={() => {
+          setName(defaultName);
+          setOpen(true);
+        }}
+      >
+        ＋ Save as collection
+      </button>
+    );
+  }
+  return (
+    <form
+      className="savecoll-form"
+      onSubmit={async (e) => {
+        e.preventDefault();
+        if (!name.trim()) return;
+        setBusy(true);
+        try {
+          await onSave(name.trim());
+          setOpen(false);
+        } finally {
+          setBusy(false);
+        }
+      }}
+    >
+      <input autoFocus value={name} onChange={(e) => setName(e.target.value)} aria-label="Collection name" />
+      <div className="capture-row">
+        <button type="submit" disabled={busy}>
+          {busy ? "Saving…" : "Save"}
+        </button>
+        <button type="button" className="ghost" onClick={() => setOpen(false)}>
+          Cancel
+        </button>
+      </div>
+    </form>
+  );
+}
+
 export function List({
   items,
   view,
   feedTitle,
+  collectionInfo,
   loaded,
   selectedId,
   notice,
@@ -62,15 +113,31 @@ export function List({
   onLensChange,
   lensFocusTick,
   lensInfo,
+  onSaveAsCollection,
   onSelect,
   onDelete,
+  onRemoveFromCollection,
   onBackToNav,
 }: Props) {
   const [confirmId, setConfirmId] = useState<number | null>(null);
-  const viewTitle = view === "feed" ? feedTitle ?? "Feed" : view === "unread" ? "Unread" : "All saved";
+  const crossLane = lensInfo != null || collectionInfo != null; // show origin tags
+
+  const viewTitle =
+    collectionInfo != null
+      ? collectionInfo.name
+      : view === "feed"
+      ? feedTitle ?? "Feed"
+      : view === "unread"
+      ? "Unread"
+      : "All saved";
   const viewSub =
-    view === "feed" ? "Streamed in" : view === "unread" ? "Saved and not yet read" : "Things you chose to keep";
-  const title = lensInfo ? "Reading about" : viewTitle;
+    collectionInfo != null
+      ? `Research collection · ${collectionInfo.count} ${collectionInfo.count === 1 ? "source" : "sources"}`
+      : view === "feed"
+      ? "Streamed in"
+      : view === "unread"
+      ? "Saved and not yet read"
+      : "Things you chose to keep";
 
   return (
     <section className="list">
@@ -87,10 +154,11 @@ export function List({
             <div className="sub">
               {items.length} across your library · {lensInfo.savedCount} saved, {lensInfo.feedCount} from feeds
             </div>
+            <SaveAsCollection defaultName={lensQuery.trim()} onSave={onSaveAsCollection} />
           </>
         ) : (
           <>
-            <h2>{title}</h2>
+            <h2>{viewTitle}</h2>
             <div className="sub">{viewSub}</div>
           </>
         )}
@@ -102,6 +170,11 @@ export function List({
         <div className="empty-state">
           <p className="empty-title">Nothing matches “{lensQuery.trim()}”.</p>
           <p className="empty-sub">Try a broader interest, or clear the search.</p>
+        </div>
+      ) : loaded && items.length === 0 && collectionInfo ? (
+        <div className="empty-state">
+          <p className="empty-title">No sources yet.</p>
+          <p className="empty-sub">Open an article and use “Add to collection” to gather sources here.</p>
         </div>
       ) : loaded && items.length === 0 ? (
         view === "unread" ? (
@@ -131,7 +204,7 @@ export function List({
                 <span className="card-main">
                   <span className="card-title">{i.title ?? i.original_url}</span>
                   <span className="meta">
-                    {lensInfo && (
+                    {crossLane && (
                       <span className={`lane-tag ${i.lane === "saved" ? "lane-saved" : "lane-feed"}`}>
                         {i.lane === "saved" ? "Saved" : "Feed"}
                       </span>
@@ -150,18 +223,23 @@ export function List({
                     <button
                       className="danger"
                       onClick={() => {
-                        onDelete(i.id);
+                        if (collectionInfo) onRemoveFromCollection(collectionInfo.id, i.id);
+                        else onDelete(i.id);
                         setConfirmId(null);
                       }}
                     >
-                      Delete
+                      {collectionInfo ? "Remove" : "Delete"}
                     </button>
                     <button className="ghost-sm" onClick={() => setConfirmId(null)}>
                       Cancel
                     </button>
                   </>
                 ) : (
-                  <button className="card-delete" aria-label={`Delete ${i.title ?? "item"}`} onClick={() => setConfirmId(i.id)}>
+                  <button
+                    className="card-delete"
+                    aria-label={`${collectionInfo ? "Remove" : "Delete"} ${i.title ?? "item"}`}
+                    onClick={() => setConfirmId(i.id)}
+                  >
                     <TrashIcon />
                   </button>
                 )}

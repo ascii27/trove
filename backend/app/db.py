@@ -77,6 +77,20 @@ CREATE TABLE IF NOT EXISTS feeds (
     last_error     TEXT,
     created_at     TEXT NOT NULL DEFAULT (datetime('now'))
 );
+
+CREATE TABLE IF NOT EXISTS collections (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    name       TEXT NOT NULL,                             -- the research question
+    query      TEXT,                                      -- the lens it was saved from (nullable)
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS item_collections (
+    collection_id INTEGER NOT NULL REFERENCES collections(id) ON DELETE CASCADE,
+    item_id       INTEGER NOT NULL REFERENCES items(id) ON DELETE CASCADE,
+    added_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (collection_id, item_id)
+);
 """
 
 # Additive migrations applied after the base schema (safe on an existing DB).

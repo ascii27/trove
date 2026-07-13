@@ -19,6 +19,16 @@ class FeedBody(BaseModel):
     url: str
 
 
+class CollectionBody(BaseModel):
+    name: str
+    query: str | None = None
+    item_ids: list[int] | None = None
+
+
+class AddItemBody(BaseModel):
+    item_id: int
+
+
 @router.get("/health")
 def health() -> dict:
     return {"status": "ok"}
@@ -147,3 +157,56 @@ def delete_feed(feed_id: int) -> dict:
         if not store.delete_feed(conn, feed_id):
             raise HTTPException(status_code=404, detail="Feed not found.")
         return {"deleted": True}
+
+
+# ---------------------------------------------------------- collections ----
+def _collection_with_count(conn, cid: int) -> dict:
+    return next((c for c in store.list_collections(conn) if c["id"] == cid), None)
+
+
+@router.get("/collections")
+def list_collections() -> dict:
+    with db.cursor() as conn:
+        return {"collections": store.list_collections(conn)}
+
+
+@router.post("/collections", status_code=201)
+def create_collection(body: CollectionBody) -> dict:
+    name = (body.name or "").strip()
+    if not name:
+        raise HTTPException(status_code=422, detail="Name the collection.")
+    with db.cursor() as conn:
+        cid = store.create_collection(conn, name, (body.query or None), body.item_ids)
+        return {"collection": _collection_with_count(conn, cid)}
+
+
+@router.get("/collections/{cid}")
+def get_collection(cid: int) -> dict:
+    with db.cursor() as conn:
+        col = store.get_collection(conn, cid)
+        if col is None:
+            raise HTTPException(status_code=404, detail="Collection not found.")
+        return {"collection": dict(col), "items": store.collection_items(conn, cid)}
+
+
+@router.delete("/collections/{cid}")
+def delete_collection(cid: int) -> dict:
+    with db.cursor() as conn:
+        if not store.delete_collection(conn, cid):
+            raise HTTPException(status_code=404, detail="Collection not found.")
+        return {"deleted": True}
+
+
+@router.post("/collections/{cid}/items")
+def add_to_collection(cid: int, body: AddItemBody) -> dict:
+    with db.cursor() as conn:
+        if not store.add_item_to_collection(conn, cid, body.item_id):
+            raise HTTPException(status_code=404, detail="Collection or item not found.")
+        return {"collection": _collection_with_count(conn, cid)}
+
+
+@router.delete("/collections/{cid}/items/{item_id}")
+def remove_from_collection(cid: int, item_id: int) -> dict:
+    with db.cursor() as conn:
+        store.remove_item_from_collection(conn, cid, item_id)
+        return {"collection": _collection_with_count(conn, cid)}

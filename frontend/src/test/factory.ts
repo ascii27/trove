@@ -43,6 +43,7 @@ export function full(over: Partial<ItemFull> = {}): ItemFull {
     content_text: "## Section\n\nA platform is a product whose customers are engineers.",
     topics: ["AI", "platform engineering"],
     claims: ["Mandated platforms rot.", "Cognitive load predicts uptake."],
+    collection_ids: [],
     ...over,
   };
 }
