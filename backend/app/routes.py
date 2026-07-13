@@ -29,6 +29,12 @@ class AddItemBody(BaseModel):
     item_id: int
 
 
+class HighlightBody(BaseModel):
+    quote: str
+    start: int
+    end: int
+
+
 @router.get("/health")
 def health() -> dict:
     return {"status": "ok"}
@@ -210,3 +216,33 @@ def remove_from_collection(cid: int, item_id: int) -> dict:
     with db.cursor() as conn:
         store.remove_item_from_collection(conn, cid, item_id)
         return {"collection": _collection_with_count(conn, cid)}
+
+
+# ------------------------------------------------------------ highlights ----
+@router.post("/items/{item_id}/highlights", status_code=201)
+def create_highlight(item_id: int, body: HighlightBody) -> dict:
+    # Store the quote verbatim (offsets must still match it for repainting);
+    # only validate that the selection isn't blank.
+    if not (body.quote or "").strip():
+        raise HTTPException(status_code=422, detail="Select some text to highlight.")
+    if body.start < 0 or body.end <= body.start:
+        raise HTTPException(status_code=422, detail="Highlight range is invalid.")
+    with db.cursor() as conn:
+        hl = store.create_highlight(conn, item_id, body.quote, body.start, body.end)
+        if hl is None:
+            raise HTTPException(status_code=404, detail="Item not found.")
+        return {"highlight": hl}
+
+
+@router.get("/highlights")
+def list_highlights() -> dict:
+    with db.cursor() as conn:
+        return {"highlights": store.list_highlights(conn)}
+
+
+@router.delete("/highlights/{hid}")
+def delete_highlight(hid: int) -> dict:
+    with db.cursor() as conn:
+        if not store.delete_highlight(conn, hid):
+            raise HTTPException(status_code=404, detail="Highlight not found.")
+        return {"deleted": True}

@@ -59,7 +59,7 @@ Runs at **https://trove-app.exe.xyz** (exe.dev VM `trove-app`, private — gated
 
 ## Key environment variables
 
-`ANTHROPIC_API_KEY` (enrichment), `TROVE_ENRICH_MODEL` (default `claude-haiku-4-5`), `TROVE_DB_PATH` (default `./trove.db`; container uses `/data/trove.db`), `TROVE_STATIC_DIR` (built SPA dir; set in the container), `TROVE_DISABLE_WORKER=1` (tests only — skips the background worker).
+`ANTHROPIC_API_KEY` (enrichment), `TROVE_ENRICH_MODEL` (default `claude-haiku-4-5`), `TROVE_DB_PATH` (default `./trove.db`; container uses `/data/trove.db`), `TROVE_STATIC_DIR` (built SPA dir; set in the container), `TROVE_DISABLE_WORKER=1` (tests only — skips the background worker). Feed poller tuning (all in `config.py`): `TROVE_FEED_POLL_SECONDS` (default 1800 / 30 min), `TROVE_FEED_AGE_DAYS` (default 30 — unread feed items auto-archive past this), `TROVE_FEED_AGE_SWEEP_SECONDS` (default 3600 / hourly).
 
 ## Conventions
 

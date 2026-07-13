@@ -35,11 +35,27 @@ export interface Feed {
   unread_count: number;
 }
 
+export interface Highlight {
+  id: number;
+  quote: string;
+  start_offset: number;
+  end_offset: number;
+  created_at: string;
+}
+
+/** A highlight plus its source item, for the global archive view. */
+export interface HighlightArchiveEntry extends Highlight {
+  item_id: number;
+  title: string | null;
+  original_url: string;
+}
+
 export interface ItemFull extends ItemSummary {
   content_text: string | null;
   topics: string[];
   claims: string[];
   collection_ids: number[];
+  highlights: Highlight[];
 }
 
 export interface Collection {

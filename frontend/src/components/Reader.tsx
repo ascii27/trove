@@ -1,4 +1,5 @@
-import type { ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { offsetsOf, paintHighlights } from "../highlights";
 import { renderMarkdown } from "../render";
 import type { Collection, ItemFull } from "../types";
 import { CollectionPicker } from "./CollectionPicker";
@@ -13,7 +14,15 @@ interface Props {
   onSave: (id: number) => void;
   onToggleCollection: (collectionId: number, itemId: number, isMember: boolean) => void;
   onCreateCollectionForItem: (name: string, itemId: number) => void;
+  onAddHighlight: (itemId: number, sel: { quote: string; start: number; end: number }) => void;
+  onRemoveHighlight: (hid: number) => void;
 }
+
+// Keep floating popovers clear of the sticky mobile back-bar.
+const TOP_CLAMP = 52;
+
+type Pending = { quote: string; start: number; end: number; x: number; y: number };
+type Removing = { id: number; x: number; y: number };
 
 const SOURCE_LABEL: Record<string, string> = {
   primary: "Primary",
@@ -97,7 +106,72 @@ export function Reader({
   onSave,
   onToggleCollection,
   onCreateCollectionForItem,
+  onAddHighlight,
+  onRemoveHighlight,
 }: Props) {
+  const proseRef = useRef<HTMLDivElement>(null);
+  const popoverRef = useRef<HTMLDivElement>(null);
+  const [pending, setPending] = useState<Pending | null>(null);
+  const [removing, setRemoving] = useState<Removing | null>(null);
+
+  const highlightsKey = (item?.highlights ?? [])
+    .map((h) => `${h.id}:${h.start_offset}:${h.end_offset}`)
+    .join(",");
+
+  // Repaint highlights after each render. React leaves the prose DOM alone
+  // while content_text is unchanged, so the marks persist between renders;
+  // they get wiped (and repainted here) only when content or highlights change.
+  useEffect(() => {
+    const root = proseRef.current;
+    if (root) paintHighlights(root, item?.highlights ?? []);
+  }, [item?.id, item?.content_text, highlightsKey]);
+
+  // Capture a text selection inside the article → offer to save it.
+  useEffect(() => {
+    const root = proseRef.current;
+    if (!root) return;
+    const onUp = (e: Event) => {
+      if (popoverRef.current?.contains(e.target as Node)) return; // ignore taps on our button
+      const sel = window.getSelection();
+      if (!sel || sel.isCollapsed || sel.rangeCount === 0) {
+        setPending(null);
+        setRemoving(null);
+        return;
+      }
+      const range = sel.getRangeAt(0);
+      const offs = offsetsOf(root, range);
+      const quote = sel.toString();
+      if (!offs || !quote.trim()) {
+        setPending(null);
+        setRemoving(null);
+        return;
+      }
+      const rect = range.getBoundingClientRect();
+      setRemoving(null);
+      setPending({ ...offs, quote, x: rect.left + rect.width / 2, y: rect.top });
+    };
+    document.addEventListener("mouseup", onUp);
+    document.addEventListener("touchend", onUp);
+    return () => {
+      document.removeEventListener("mouseup", onUp);
+      document.removeEventListener("touchend", onUp);
+    };
+  }, [item?.id]);
+
+  const savePending = () => {
+    if (pending && item) onAddHighlight(item.id, { quote: pending.quote, start: pending.start, end: pending.end });
+    setPending(null);
+    window.getSelection()?.removeAllRanges();
+  };
+
+  // Clicking a painted highlight offers to remove it.
+  const onProseClick = (e: React.MouseEvent) => {
+    const mark = (e.target as HTMLElement).closest?.("mark.hl") as HTMLElement | null;
+    if (!mark?.dataset.hlId) return;
+    setPending(null);
+    setRemoving({ id: Number(mark.dataset.hlId), x: e.clientX, y: e.clientY });
+  };
+
   let content: ReactNode;
 
   if (!item) {
@@ -166,7 +240,12 @@ export function Reader({
             </div>
           )}
           {item.content_text && (
-            <div className="prose" dangerouslySetInnerHTML={{ __html: renderMarkdown(item.content_text) }} />
+            <div
+              ref={proseRef}
+              className="prose"
+              onClick={onProseClick}
+              dangerouslySetInnerHTML={{ __html: renderMarkdown(item.content_text) }}
+            />
           )}
         </article>
         <MetaPanel item={item} highlightTopics={highlightTopics} />
@@ -182,6 +261,35 @@ export function Reader({
         </button>
       )}
       {content}
+      {pending && (
+        <div
+          ref={popoverRef}
+          className="hl-pop"
+          style={{ top: Math.max(pending.y - 44, TOP_CLAMP), left: pending.x }}
+        >
+          {/* preventDefault keeps the selection alive through the tap */}
+          <button onPointerDown={(e) => e.preventDefault()} onClick={savePending}>
+            ✦ Highlight
+          </button>
+        </div>
+      )}
+      {removing && (
+        <div
+          ref={popoverRef}
+          className="hl-pop"
+          style={{ top: Math.max(removing.y - 44, TOP_CLAMP), left: removing.x }}
+        >
+          <button
+            className="danger"
+            onClick={() => {
+              onRemoveHighlight(removing.id);
+              setRemoving(null);
+            }}
+          >
+            Remove highlight
+          </button>
+        </div>
+      )}
     </section>
   );
 }

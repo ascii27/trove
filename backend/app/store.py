@@ -73,6 +73,7 @@ def get_item(conn: sqlite3.Connection, item_id: int) -> dict | None:
             "SELECT collection_id FROM item_collections WHERE item_id = ?", (item_id,)
         )
     ]
+    item["highlights"] = highlights_for_item(conn, item_id)
     return item
 
 
@@ -433,3 +434,51 @@ def collection_items(conn: sqlite3.Connection, cid: int) -> list[dict]:
         (cid,),
     ).fetchall()
     return [_item_dict(r) for r in rows]
+
+
+# ------------------------------------------------------------- highlights ----
+_HL_COLS = "id, quote, start_offset, end_offset, created_at"
+
+
+def create_highlight(
+    conn: sqlite3.Connection, item_id: int, quote: str, start: int, end: int
+) -> dict | None:
+    """Save a highlight anchored by char offsets into the item's rendered text.
+
+    Returns the new highlight dict, or None if the item does not exist.
+    """
+    if conn.execute("SELECT 1 FROM items WHERE id = ?", (item_id,)).fetchone() is None:
+        return None
+    cur = conn.execute(
+        "INSERT INTO highlights (item_id, quote, start_offset, end_offset) VALUES (?, ?, ?, ?)",
+        (item_id, quote, start, end),
+    )
+    row = conn.execute(
+        f"SELECT {_HL_COLS} FROM highlights WHERE id = ?", (cur.lastrowid,)
+    ).fetchone()
+    return dict(row)
+
+
+def highlights_for_item(conn: sqlite3.Connection, item_id: int) -> list[dict]:
+    """An item's highlights, in document order (by start offset)."""
+    rows = conn.execute(
+        f"SELECT {_HL_COLS} FROM highlights WHERE item_id = ? ORDER BY start_offset, id",
+        (item_id,),
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def list_highlights(conn: sqlite3.Connection) -> list[dict]:
+    """Global archive: every highlight with its source item, newest first."""
+    rows = conn.execute(
+        "SELECT h.id, h.quote, h.start_offset, h.end_offset, h.created_at, "
+        "h.item_id, i.title, i.original_url "
+        "FROM highlights h JOIN items i ON i.id = h.item_id "
+        "ORDER BY h.created_at DESC, h.id DESC"
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def delete_highlight(conn: sqlite3.Connection, hid: int) -> bool:
+    cur = conn.execute("DELETE FROM highlights WHERE id = ?", (hid,))
+    return cur.rowcount > 0

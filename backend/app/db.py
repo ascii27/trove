@@ -91,6 +91,15 @@ CREATE TABLE IF NOT EXISTS item_collections (
     added_at      TEXT NOT NULL DEFAULT (datetime('now')),
     PRIMARY KEY (collection_id, item_id)
 );
+
+CREATE TABLE IF NOT EXISTS highlights (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    item_id      INTEGER NOT NULL REFERENCES items(id) ON DELETE CASCADE,
+    quote        TEXT NOT NULL,                             -- the selected passage
+    start_offset INTEGER NOT NULL,                          -- char offset into rendered .prose text
+    end_offset   INTEGER NOT NULL,                          -- half-open end offset
+    created_at   TEXT NOT NULL DEFAULT (datetime('now'))
+);
 """
 
 # Additive migrations applied after the base schema (safe on an existing DB).
@@ -123,6 +132,7 @@ def init_db(path: str | None = None) -> None:
                 conn.execute(ddl)
         conn.execute("CREATE INDEX IF NOT EXISTS idx_items_feed ON items (feed_id)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_items_lane ON items (lane)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_highlights_item ON highlights (item_id)")
         conn.commit()
 
 
