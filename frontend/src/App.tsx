@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { api } from "./api";
+import { api, type LensResponse } from "./api";
 import { Capture } from "./components/Capture";
 import { Nav } from "./components/Nav";
 import { List } from "./components/List";
@@ -18,6 +18,11 @@ export default function App() {
   const [selected, setSelected] = useState<ItemFull | null>(null);
   // Mobile drills nav → list → reader; listOpen tracks the first step (desktop ignores it).
   const [listOpen, setListOpen] = useState(false);
+  // Lens: a live "read about X" query that overrides the current view across both lanes.
+  const [lensQuery, setLensQuery] = useState("");
+  const [lensResults, setLensResults] = useState<LensResponse | null>(null);
+  const [matchedTopics, setMatchedTopics] = useState<string[]>([]);
+  const [lensFocusTick, setLensFocusTick] = useState(0);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
@@ -40,6 +45,23 @@ export default function App() {
       setError((e as Error).message);
     }
   }, []);
+
+  // Debounced lens query. Empty query → no lens (show the current view).
+  useEffect(() => {
+    const q = lensQuery.trim();
+    if (!q) {
+      setLensResults(null);
+      return;
+    }
+    const t = setTimeout(async () => {
+      try {
+        setLensResults(await api.lens(q));
+      } catch (e) {
+        setError((e as Error).message);
+      }
+    }, 300);
+    return () => clearTimeout(t);
+  }, [lensQuery]);
 
   useEffect(() => {
     loadFeeds();
@@ -74,6 +96,8 @@ export default function App() {
     async (id: number) => {
       setSelectedId(id);
       setNotice(null);
+      // Carry the lens's matched topics for this item so the reader can highlight them.
+      setMatchedTopics(lensResults?.items.find((i) => i.id === id)?.matched_topics ?? []);
       try {
         const { item } = await api.get(id); // GET also triggers lazy-load for deferred feed items
         if (item.read_state === "unread") {
@@ -89,8 +113,15 @@ export default function App() {
         setError((e as Error).message);
       }
     },
-    [loadFeeds]
+    [loadFeeds, lensResults]
   );
+
+  const onSearch = useCallback(() => {
+    setListOpen(true);
+    setSelectedId(null); // land on the list/search screen, not a lingering reader
+    setSelected(null);
+    setLensFocusTick((t) => t + 1);
+  }, []);
 
   const onCapture = useCallback(
     async (url: string) => {
@@ -187,6 +218,9 @@ export default function App() {
     if (selectedId != null) setListOpen(true);
   }, [selectedId]);
 
+  const lensActive = lensQuery.trim() !== "";
+  const displayItems = lensActive ? lensResults?.items ?? [] : items;
+
   return (
     <div className={`app${listOpen ? " list-open" : ""}${selectedId != null ? " reading" : ""}`}>
       <Nav
@@ -194,6 +228,7 @@ export default function App() {
         feedId={feedId}
         feeds={feeds}
         unreadCount={unreadCount}
+        lensActive={lensActive}
         savedCount={view === "feed" ? feeds.find((f) => f.id === feedId)?.unread_count ?? 0 : items.length}
         onSelectSaved={(v) => {
           setView(v);
@@ -205,23 +240,39 @@ export default function App() {
           setFeedId(id);
           setListOpen(true);
         }}
+        onSearch={onSearch}
         onAddFeed={onAddFeed}
         onDeleteFeed={onDeleteFeed}
         captureSlot={<Capture onCapture={onCapture} />}
       />
       <List
-        items={items}
+        items={displayItems}
         view={view}
         feedTitle={view === "feed" ? feeds.find((f) => f.id === feedId)?.title ?? "Feed" : null}
         loaded={loaded}
         selectedId={selectedId}
         notice={notice}
         error={error}
+        lensQuery={lensQuery}
+        onLensChange={setLensQuery}
+        lensFocusTick={lensFocusTick}
+        lensInfo={
+          lensActive
+            ? { savedCount: lensResults?.saved_count ?? 0, feedCount: lensResults?.feed_count ?? 0 }
+            : null
+        }
         onSelect={openItem}
         onDelete={onDelete}
         onBackToNav={onBackToNav}
       />
-      <Reader item={selected} onMarkUnread={onMarkUnread} onRetry={onRetry} onBack={onBack} onSave={onSave} />
+      <Reader
+        item={selected}
+        highlightTopics={matchedTopics}
+        onMarkUnread={onMarkUnread}
+        onRetry={onRetry}
+        onBack={onBack}
+        onSave={onSave}
+      />
     </div>
   );
 }

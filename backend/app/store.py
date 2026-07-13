@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import sqlite3
 
+from . import lens as lens_mod
 from . import topics as topics_mod
 from .enrich import EnrichResult
 from .extract import Extracted
@@ -82,6 +83,42 @@ def list_items(conn: sqlite3.Connection, view: str = "all", feed_id: int | None 
         order = "ORDER BY date_saved DESC, id DESC"
     rows = conn.execute(f"SELECT {_LIST_COLS} FROM items {where} {order}", params).fetchall()
     return [_item_dict(r) for r in rows]
+
+
+def lens_search(conn: sqlite3.Connection, query: str) -> dict:
+    """Rank items across both lanes for an interest query. Each result carries a
+    `matched_topics` list; results are sorted by score, then recency."""
+    terms = lens_mod.expand(query)
+    if not terms:
+        return {"items": [], "saved_count": 0, "feed_count": 0}
+
+    rows = conn.execute(
+        f"SELECT {_LIST_COLS} FROM items WHERE read_state != 'archived' AND lane IN ('saved', 'feed')"
+    ).fetchall()
+    topics_map: dict[int, list[str]] = {}
+    for r in conn.execute(
+        "SELECT it.item_id AS iid, t.name AS name FROM item_topics it JOIN topics t ON t.id = it.topic_id"
+    ):
+        topics_map.setdefault(r["iid"], []).append(r["name"])
+    claims_map: dict[int, list[str]] = {}
+    for r in conn.execute("SELECT item_id, text FROM claims ORDER BY position"):
+        claims_map.setdefault(r["item_id"], []).append(r["text"])
+
+    scored: list[tuple[int, dict]] = []
+    for r in rows:
+        its = topics_map.get(r["id"], [])
+        score, matched = lens_mod.score_item(
+            title=r["title"], summary=r["summary"], category=r["category"],
+            claims=claims_map.get(r["id"], []), item_topics=its, terms=terms,
+        )
+        if score > 0:
+            d = _item_dict(r)
+            d["matched_topics"] = matched
+            scored.append((score, d))
+    scored.sort(key=lambda pair: (pair[0], pair[1]["date_saved"]), reverse=True)
+    items = [d for _, d in scored]
+    saved = sum(1 for d in items if d["lane"] == "saved")
+    return {"items": items, "saved_count": saved, "feed_count": len(items) - saved}
 
 
 def unread_count(conn: sqlite3.Connection) -> int:

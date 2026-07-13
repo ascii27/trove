@@ -25,6 +25,10 @@ body,
   margin: 0;
   height: 100%;
 }
+html,
+body {
+  overflow-x: hidden;
+}
 body {
   font-family: var(--sans);
   color: var(--ink);
@@ -275,6 +279,77 @@ body {
 .list-head .sub {
   color: var(--ink-faint);
   font-size: 12.5px;
+}
+.list-head h2 .lens-term {
+  color: var(--accent);
+  font-style: italic;
+}
+
+/* ---- lens (search) bar ---- */
+.lens-bar {
+  position: relative;
+  display: flex;
+  align-items: center;
+  margin-bottom: 12px;
+}
+.lens-bar svg {
+  position: absolute;
+  left: 11px;
+  color: var(--ink-faint);
+  pointer-events: none;
+}
+.lens-bar input {
+  width: 100%;
+  font: inherit;
+  font-size: 13.5px;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 9px 30px 9px 34px;
+  outline: none;
+}
+.lens-bar input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+.lens-bar input::placeholder {
+  color: var(--ink-faint);
+}
+.lens-clear {
+  position: absolute;
+  right: 8px;
+  border: none;
+  background: none;
+  color: var(--ink-faint);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 2px 6px;
+}
+.lens-clear:hover {
+  color: var(--ink);
+}
+.nav-search {
+  margin-bottom: 2px;
+}
+
+/* cross-lane origin tags on lens results */
+.lane-tag {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  border-radius: 4px;
+  padding: 1px 6px;
+}
+.lane-saved {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.lane-feed {
+  background: #efede8;
+  color: var(--ink-soft);
 }
 .notice {
   margin-top: 10px;
@@ -679,6 +754,11 @@ body {
   padding: 2px 9px;
   color: var(--ink-soft);
 }
+.tags span.hit {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
 .claims {
   margin: 6px 0 0;
   padding-left: 16px;
@@ -769,12 +849,21 @@ body {
   .app.list-open .list {
     transform: translateX(0);
   }
-  /* level 3: an item is open (reader on top; list parked to the left) */
+  /* level 3: an item is open (reader on top; nav + list parked to the left) */
+  .app.reading .nav,
   .app.reading .list {
     transform: translateX(-100%);
   }
   .app.reading .reader {
     transform: translateX(0);
+  }
+
+  /* iOS zooms in when focusing an input under 16px, which then lets the page
+     pan sideways and expose the off-screen panes. Keep mobile inputs at 16px. */
+  .lens-bar input,
+  .capture input,
+  .feed-capture input {
+    font-size: 16px;
   }
 
   .card-delete {

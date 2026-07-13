@@ -9,7 +9,9 @@ A personal read-later, research, and feed-reading tool (self-hosted, single user
 - **Phase 1** — Pocket replacement: capture a URL → server-side extraction → calm typography-first reader → AI metadata (summary, topics, source type, key claims) → read/unread + delete.
 - **Phase 2a (Feeds)** — the second, "streamed" lane: add RSS/Atom feeds (paste a feed URL *or* a site URL and it auto-discovers the feed), a background poller pulls new items in as `lane='feed'`, the newest 10 per poll get the full extract+enrich pipeline while the rest are `deferred` (load on first open), unread feed items auto-archive after 30 days, and you can promote (save) a feed item into the Saved lane. Lanes stay strictly separate.
 
-Still to come: **2b** interest-lenses/query (cross-lane "read about X", semantic search), **2c** research collections, **3** cross-source synthesis. The `lane` column, durable `jobs` worker, and canonical `topics` table were built in Phase 1 so these extend rather than rewrite.
+- **Phase 2b (Lens)** — the "read about X" query surface: a live query bar expands an interest into related terms (`lens.py`) and scores every non-archived item across **both lanes** — normalized topics weighted highest, then title/summary/claims/category — returning ranked, cross-lane results tagged Saved/Feed with matched topics highlighted in the reader. Keyword + topic + metadata matching (no embeddings). `GET /api/lens?q=…`. Ephemeral; "save as collection" is 2c.
+
+Still to come: **2c** research collections (persist a lens), **3** cross-source synthesis. The `lane` column, durable `jobs` worker, and canonical `topics` table were built in Phase 1 so these extend rather than rewrite.
 
 Full design + rationale: `~/.claude/plans/staged-noodling-sparkle.md`. Product spec (external): `~/Downloads/files/trove-prd.md`; IA mockup: `~/Downloads/files/reader-ia-mockup.html`.
 

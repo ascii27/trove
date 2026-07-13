@@ -8,13 +8,13 @@ const noop = vi.fn();
 
 describe("List", () => {
   it("shows the empty-library invitation when nothing is saved", () => {
-    render(<List items={[]} view="all" feedTitle={null} loaded selectedId={null} notice={null} error={null} onSelect={noop} onDelete={noop} onBackToNav={noop} />);
+    render(<List items={[]} view="all" feedTitle={null} loaded selectedId={null} notice={null} error={null} lensQuery="" onLensChange={noop} lensFocusTick={0} lensInfo={null} onSelect={noop} onDelete={noop} onBackToNav={noop} />);
     expect(screen.getByText(/library is empty/i)).toBeInTheDocument();
     expect(screen.getByText(/save your first article/i)).toBeInTheDocument();
   });
 
   it("says you're caught up when there are no unread items", () => {
-    render(<List items={[]} view="unread" feedTitle={null} loaded selectedId={null} notice={null} error={null} onSelect={noop} onDelete={noop} onBackToNav={noop} />);
+    render(<List items={[]} view="unread" feedTitle={null} loaded selectedId={null} notice={null} error={null} lensQuery="" onLensChange={noop} lensFocusTick={0} lensInfo={null} onSelect={noop} onDelete={noop} onBackToNav={noop} />);
     expect(screen.getByText(/all caught up/i)).toBeInTheDocument();
   });
 
@@ -26,7 +26,7 @@ describe("List", () => {
         loaded
         selectedId={null}
         notice={null}
-        error={null}
+        error={null} lensQuery="" onLensChange={noop} lensFocusTick={0} lensInfo={null}
         onSelect={noop} onDelete={noop} onBackToNav={noop}
       />
     );
@@ -45,7 +45,7 @@ describe("List", () => {
         loaded
         selectedId={null}
         notice={null}
-        error={null}
+        error={null} lensQuery="" onLensChange={noop} lensFocusTick={0} lensInfo={null}
         onSelect={vi.fn()}
         onDelete={onDelete} onBackToNav={noop}
       />
@@ -64,7 +64,7 @@ describe("List", () => {
         loaded
         selectedId={null}
         notice={null}
-        error={null}
+        error={null} lensQuery="" onLensChange={noop} lensFocusTick={0} lensInfo={null}
         onSelect={noop} onDelete={noop} onBackToNav={noop}
       />
     );
@@ -81,7 +81,7 @@ describe("List", () => {
         loaded
         selectedId={null}
         notice={null}
-        error={null}
+        error={null} lensQuery="" onLensChange={noop} lensFocusTick={0} lensInfo={null}
         onSelect={noop}
         onDelete={noop}
         onBackToNav={onBackToNav}
@@ -89,5 +89,30 @@ describe("List", () => {
     );
     await userEvent.click(screen.getByRole("button", { name: /back to menu/i }));
     expect(onBackToNav).toHaveBeenCalled();
+  });
+
+  it("renders lens results with a 'reading about' header and cross-lane tags", () => {
+    render(
+      <List
+        items={[summary({ id: 1, lane: "saved" }), summary({ id: 2, lane: "feed", title: "Feed item" })]}
+        view="all"
+        feedTitle={null}
+        loaded
+        selectedId={null}
+        notice={null}
+        error={null}
+        lensQuery="AI"
+        onLensChange={noop}
+        lensFocusTick={0}
+        lensInfo={{ savedCount: 1, feedCount: 1 }}
+        onSelect={noop}
+        onDelete={noop}
+        onBackToNav={noop}
+      />
+    );
+    expect(screen.getByText(/reading about/i)).toBeInTheDocument();
+    expect(screen.getByText("AI")).toBeInTheDocument(); // the lens term
+    expect(screen.getByText("Saved")).toBeInTheDocument(); // cross-lane origin tag
+    expect(screen.getByText("Feed")).toBeInTheDocument();
   });
 });

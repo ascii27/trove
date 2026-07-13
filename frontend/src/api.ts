@@ -27,6 +27,12 @@ export interface CaptureResponse {
   duplicate: boolean;
 }
 
+export interface LensResponse {
+  query: string;
+  items: ItemSummary[];
+  saved_count: number;
+  feed_count: number;
+}
 export interface FeedsResponse {
   feeds: Feed[];
 }
@@ -49,6 +55,8 @@ export const api = {
   remove: (id: number) =>
     req<{ deleted: boolean; unread_count: number }>(`/api/items/${id}`, { method: "DELETE" }),
   save: (id: number) => req<{ item: ItemFull }>(`/api/items/${id}/save`, { method: "POST" }),
+
+  lens: (q: string) => req<LensResponse>(`/api/lens?q=${encodeURIComponent(q)}`),
 
   feeds: () => req<FeedsResponse>("/api/feeds"),
   addFeed: (url: string) =>

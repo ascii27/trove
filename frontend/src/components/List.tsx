@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { ItemSummary } from "../types";
+import { LensBar } from "./LensBar";
 
 interface Props {
   items: ItemSummary[];
@@ -9,6 +10,10 @@ interface Props {
   selectedId: number | null;
   notice: string | null;
   error: string | null;
+  lensQuery: string;
+  onLensChange: (q: string) => void;
+  lensFocusTick: number;
+  lensInfo: { savedCount: number; feedCount: number } | null;
   onSelect: (id: number) => void;
   onDelete: (id: number) => void;
   onBackToNav: () => void;
@@ -45,11 +50,27 @@ const TrashIcon = () => (
   </svg>
 );
 
-export function List({ items, view, feedTitle, loaded, selectedId, notice, error, onSelect, onDelete, onBackToNav }: Props) {
+export function List({
+  items,
+  view,
+  feedTitle,
+  loaded,
+  selectedId,
+  notice,
+  error,
+  lensQuery,
+  onLensChange,
+  lensFocusTick,
+  lensInfo,
+  onSelect,
+  onDelete,
+  onBackToNav,
+}: Props) {
   const [confirmId, setConfirmId] = useState<number | null>(null);
-  const title = view === "feed" ? feedTitle ?? "Feed" : view === "unread" ? "Unread" : "All saved";
-  const subtitle =
+  const viewTitle = view === "feed" ? feedTitle ?? "Feed" : view === "unread" ? "Unread" : "All saved";
+  const viewSub =
     view === "feed" ? "Streamed in" : view === "unread" ? "Saved and not yet read" : "Things you chose to keep";
+  const title = lensInfo ? "Reading about" : viewTitle;
 
   return (
     <section className="list">
@@ -57,13 +78,32 @@ export function List({ items, view, feedTitle, loaded, selectedId, notice, error
         <button className="list-back" onClick={onBackToNav} aria-label="Back to menu">
           ← Menu
         </button>
-        <h2>{title}</h2>
-        <div className="sub">{subtitle}</div>
+        <LensBar value={lensQuery} onChange={onLensChange} focusTick={lensFocusTick} />
+        {lensInfo ? (
+          <>
+            <h2>
+              Reading about <span className="lens-term">{lensQuery.trim()}</span>
+            </h2>
+            <div className="sub">
+              {items.length} across your library · {lensInfo.savedCount} saved, {lensInfo.feedCount} from feeds
+            </div>
+          </>
+        ) : (
+          <>
+            <h2>{title}</h2>
+            <div className="sub">{viewSub}</div>
+          </>
+        )}
         {notice && <div className="notice">{notice}</div>}
         {error && <div className="banner-error">{error}</div>}
       </div>
 
-      {loaded && items.length === 0 ? (
+      {loaded && items.length === 0 && lensInfo ? (
+        <div className="empty-state">
+          <p className="empty-title">Nothing matches “{lensQuery.trim()}”.</p>
+          <p className="empty-sub">Try a broader interest, or clear the search.</p>
+        </div>
+      ) : loaded && items.length === 0 ? (
         view === "unread" ? (
           <div className="empty-state">
             <p className="empty-title">You're all caught up.</p>
@@ -91,6 +131,11 @@ export function List({ items, view, feedTitle, loaded, selectedId, notice, error
                 <span className="card-main">
                   <span className="card-title">{i.title ?? i.original_url}</span>
                   <span className="meta">
+                    {lensInfo && (
+                      <span className={`lane-tag ${i.lane === "saved" ? "lane-saved" : "lane-feed"}`}>
+                        {i.lane === "saved" ? "Saved" : "Feed"}
+                      </span>
+                    )}
                     {metaBits(i).map((b, idx) => (
                       <span key={idx}>{b}</span>
                     ))}
