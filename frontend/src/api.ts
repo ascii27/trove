@@ -1,4 +1,4 @@
-import type { Collection, Feed, Highlight, HighlightArchiveEntry, ItemFull, ItemSummary } from "./types";
+import type { Bookmark, Collection, Feed, Highlight, HighlightArchiveEntry, ItemFull, ItemSummary } from "./types";
 
 async function req<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(path, {
@@ -45,8 +45,8 @@ export const api = {
   list: (view: "all" | "unread" | "feed", feedId?: number) =>
     req<ListResponse>(`/api/items?view=${view}${feedId != null ? `&feed_id=${feedId}` : ""}`),
   get: (id: number) => req<{ item: ItemFull }>(`/api/items/${id}`),
-  capture: (url: string) =>
-    req<CaptureResponse>("/api/items", { method: "POST", body: JSON.stringify({ url }) }),
+  capture: (url: string, kind: "saved" | "bookmark" = "saved") =>
+    req<CaptureResponse>("/api/items", { method: "POST", body: JSON.stringify({ url, kind }) }),
   markRead: (id: number) =>
     req<{ item: ItemFull; unread_count: number }>(`/api/items/${id}/read`, { method: "POST" }),
   markUnread: (id: number) =>
@@ -88,4 +88,13 @@ export const api = {
     }),
   removeHighlight: (hid: number) =>
     req<{ deleted: boolean }>(`/api/highlights/${hid}`, { method: "DELETE" }),
+
+  bookmarks: () => req<{ bookmarks: Bookmark[] }>("/api/bookmarks"),
+  addTag: (itemId: number, name: string) =>
+    req<{ topics: string[] }>(`/api/items/${itemId}/tags`, {
+      method: "POST",
+      body: JSON.stringify({ name }),
+    }),
+  removeTag: (itemId: number, name: string) =>
+    req<{ topics: string[] }>(`/api/items/${itemId}/tags/${encodeURIComponent(name)}`, { method: "DELETE" }),
 };

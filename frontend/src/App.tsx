@@ -4,9 +4,12 @@ import { Capture } from "./components/Capture";
 import { Nav } from "./components/Nav";
 import { List } from "./components/List";
 import { HighlightsList } from "./components/HighlightsList";
+import { BookmarksList } from "./components/BookmarksList";
 import { Reader } from "./components/Reader";
 import {
+  bookmarkPending,
   isPending,
+  type Bookmark,
   type Collection,
   type Feed,
   type HighlightArchiveEntry,
@@ -14,7 +17,7 @@ import {
   type ItemSummary,
 } from "./types";
 
-type View = "all" | "unread" | "feed" | "collection" | "highlights";
+type View = "all" | "unread" | "feed" | "collection" | "highlights" | "bookmarks";
 
 export default function App() {
   const [view, setView] = useState<View>("all");
@@ -24,6 +27,7 @@ export default function App() {
   const [collectionId, setCollectionId] = useState<number | null>(null);
   const [collectionName, setCollectionName] = useState<string>("");
   const [highlightsArchive, setHighlightsArchive] = useState<HighlightArchiveEntry[]>([]);
+  const [bookmarks, setBookmarks] = useState<Bookmark[]>([]);
   const [items, setItems] = useState<ItemSummary[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [selectedId, setSelectedId] = useState<number | null>(null);
@@ -63,8 +67,20 @@ export default function App() {
     }
   }, []);
 
+  const loadBookmarks = useCallback(async () => {
+    try {
+      setBookmarks((await api.bookmarks()).bookmarks);
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
   const loadCurrent = useCallback(
     async (v: View, fid: number | null, cid: number | null) => {
+      // Highlights/Bookmarks are their own lanes with dedicated loaders — never
+      // hit the item list endpoint for them (it rejects those view names, and
+      // polling calls their loaders separately).
+      if (v === "highlights" || v === "bookmarks") return;
       try {
         if (v === "collection" && cid != null) {
           const res = await api.getCollection(cid);
@@ -109,18 +125,22 @@ export default function App() {
     loadFeeds();
     loadCollections();
     loadHighlights();
-  }, [loadFeeds, loadCollections, loadHighlights]);
+    loadBookmarks();
+  }, [loadFeeds, loadCollections, loadHighlights, loadBookmarks]);
   useEffect(() => {
     setLoaded(false);
     if (view === "highlights") {
       loadHighlights().then(() => setLoaded(true));
+    } else if (view === "bookmarks") {
+      loadBookmarks().then(() => setLoaded(true));
     } else {
       loadCurrent(view, feedId, collectionId);
     }
-  }, [view, feedId, collectionId, loadCurrent, loadHighlights]);
+  }, [view, feedId, collectionId, loadCurrent, loadHighlights, loadBookmarks]);
 
   // Poll while anything visible is still extracting/enriching.
-  const anyPending = items.some(isPending) || (selected != null && isPending(selected));
+  const anyPending =
+    items.some(isPending) || (selected != null && isPending(selected)) || bookmarks.some(bookmarkPending);
   const selectedRef = useRef(selected);
   selectedRef.current = selected;
   useEffect(() => {
@@ -128,6 +148,7 @@ export default function App() {
     const id = setInterval(async () => {
       await reloadCurrent();
       await loadFeeds();
+      await loadBookmarks();
       const cur = selectedRef.current;
       if (cur && isPending(cur)) {
         try {
@@ -138,7 +159,7 @@ export default function App() {
       }
     }, 2500);
     return () => clearInterval(id);
-  }, [anyPending, reloadCurrent, loadFeeds]);
+  }, [anyPending, reloadCurrent, loadFeeds, loadBookmarks]);
 
   const openItem = useCallback(
     async (id: number) => {
@@ -172,16 +193,24 @@ export default function App() {
   }, []);
 
   const onCapture = useCallback(
-    async (url: string) => {
+    async (url: string, kind: "saved" | "bookmark") => {
       setNotice(null);
-      const res = await api.capture(url);
+      const res = await api.capture(url, kind);
+      if (kind === "bookmark") {
+        setView("bookmarks");
+        setFeedId(null);
+        setListOpen(true);
+        await loadBookmarks();
+        if (res.duplicate) setNotice("That URL is already saved.");
+        return;
+      }
       setView("all");
       setFeedId(null);
       await loadCurrent("all", null, null);
       if (res.duplicate) setNotice("You've already saved that — here it is.");
       openItem(res.item.id);
     },
-    [loadCurrent, openItem]
+    [loadCurrent, openItem, loadBookmarks]
   );
 
   const onAddFeed = useCallback(
@@ -351,6 +380,33 @@ export default function App() {
     setLensQuery("");
   }, []);
 
+  // --- bookmarks ---
+  const onSelectBookmarks = useCallback(() => {
+    setView("bookmarks");
+    setFeedId(null);
+    setCollectionId(null);
+    setListOpen(true);
+    setLensQuery("");
+  }, []);
+
+  const onDeleteBookmark = useCallback(
+    async (id: number) => {
+      await api.remove(id);
+      setBookmarks((prev) => prev.filter((b) => b.id !== id));
+    },
+    []
+  );
+
+  const onAddBookmarkTag = useCallback(async (id: number, name: string) => {
+    const { topics } = await api.addTag(id, name);
+    setBookmarks((prev) => prev.map((b) => (b.id === id ? { ...b, topics } : b)));
+  }, []);
+
+  const onRemoveBookmarkTag = useCallback(async (id: number, name: string) => {
+    const { topics } = await api.removeTag(id, name);
+    setBookmarks((prev) => prev.map((b) => (b.id === id ? { ...b, topics } : b)));
+  }, []);
+
   // onCapture opens a reader item; make sure the mobile list is "entered" too.
   useEffect(() => {
     if (selectedId != null) setListOpen(true);
@@ -388,6 +444,8 @@ export default function App() {
         onDeleteCollection={onDeleteCollection}
         onSelectHighlights={onSelectHighlights}
         highlightCount={highlightsArchive.length}
+        onSelectBookmarks={onSelectBookmarks}
+        bookmarkCount={bookmarks.length}
         onSearch={onSearch}
         onAddFeed={onAddFeed}
         onDeleteFeed={onDeleteFeed}
@@ -400,6 +458,15 @@ export default function App() {
           selectedItemId={selectedId}
           onOpen={openItem}
           onRemove={onRemoveHighlight}
+          onBackToNav={onBackToNav}
+        />
+      ) : view === "bookmarks" ? (
+        <BookmarksList
+          bookmarks={bookmarks}
+          loaded={loaded}
+          onDelete={onDeleteBookmark}
+          onAddTag={onAddBookmarkTag}
+          onRemoveTag={onRemoveBookmarkTag}
           onBackToNav={onBackToNav}
         />
       ) : (

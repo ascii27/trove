@@ -7,7 +7,9 @@ reader renders it. `extract_from_html` is pure (no network) so tests use fixture
 from __future__ import annotations
 
 import math
+import re
 from dataclasses import dataclass, field
+from urllib.parse import urljoin, urlsplit
 
 import httpx
 import trafilatura
@@ -96,3 +98,63 @@ def fetch_and_extract(url: str, *, fetcher=fetch_html) -> Extracted:
     except Exception as exc:  # noqa: BLE001 - defensive; extraction must never crash the worker
         return Extracted(status="failed", error=f"Unexpected fetch error: {exc.__class__.__name__}")
     return extract_from_html(html, url)
+
+
+# --------------------------------------------------------------- bookmarks ----
+@dataclass
+class BookmarkMeta:
+    """Light metadata for a bookmarked URL. `body_text` is transient (fed to the
+    AI for a summary + tags) and never persisted."""
+    status: str  # 'extracted' | 'failed'
+    title: str | None = None
+    source: str | None = None       # site name
+    publish_date: str | None = None
+    description: str | None = None   # meta/OG description
+    favicon_url: str | None = None
+    body_text: str | None = None
+    error: str | None = None
+
+
+def _favicon_url(html: str, url: str) -> str:
+    """Prefer a declared <link rel="icon">; fall back to /favicon.ico at the host."""
+    for m in re.finditer(r"<link\b[^>]*>", html, re.IGNORECASE):
+        tag = m.group(0)
+        if not re.search(r'rel\s*=\s*["\'][^"\']*\bicon\b', tag, re.IGNORECASE):
+            continue
+        href = re.search(r'href\s*=\s*["\']([^"\']+)["\']', tag, re.IGNORECASE)
+        if href:
+            return urljoin(url, href.group(1))
+    parts = urlsplit(url)
+    return f"{parts.scheme}://{parts.netloc}/favicon.ico"
+
+
+def metadata_from_html(html: str, url: str) -> BookmarkMeta:
+    """Pure: derive bookmark metadata from HTML (no network) — testable via fixtures."""
+    meta = trafilatura.extract_metadata(html, default_url=url)
+    title = getattr(meta, "title", None) if meta else None
+    source = (getattr(meta, "sitename", None) or getattr(meta, "hostname", None)) if meta else None
+    publish_date = getattr(meta, "date", None) if meta else None
+    description = getattr(meta, "description", None) if meta else None
+    body = trafilatura.extract(html, url=url, output_format="markdown", favor_recall=True)
+    return BookmarkMeta(
+        status="extracted",
+        title=title,
+        source=source,
+        publish_date=publish_date,
+        description=description,
+        favicon_url=_favicon_url(html, url),
+        body_text=(body or None),
+    )
+
+
+def fetch_metadata(url: str, *, fetcher=fetch_html) -> BookmarkMeta:
+    """Fetch a URL once and derive light bookmark metadata. Failure-tolerant: a
+    page we can't reach still yields a usable bookmark (status='failed', no title
+    — the caller falls back to the URL host)."""
+    try:
+        html = fetcher(url)
+    except Exception as exc:  # noqa: BLE001 - a bad URL must not block bookmarking
+        parts = urlsplit(url)
+        favicon = f"{parts.scheme}://{parts.netloc}/favicon.ico" if parts.netloc else None
+        return BookmarkMeta(status="failed", favicon_url=favicon, error=exc.__class__.__name__)
+    return metadata_from_html(html, url)

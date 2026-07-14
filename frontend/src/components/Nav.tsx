@@ -3,7 +3,7 @@ import type { Collection, Feed } from "../types";
 import { AddFeed } from "./AddFeed";
 
 interface Props {
-  view: "all" | "unread" | "feed" | "collection" | "highlights";
+  view: "all" | "unread" | "feed" | "collection" | "highlights" | "bookmarks";
   feedId: number | null;
   feeds: Feed[];
   collections: Collection[];
@@ -17,6 +17,8 @@ interface Props {
   onDeleteCollection: (id: number) => void;
   onSelectHighlights: () => void;
   highlightCount: number;
+  onSelectBookmarks: () => void;
+  bookmarkCount: number;
   onSearch: () => void;
   onAddFeed: (url: string) => Promise<void>;
   onDeleteFeed: (id: number) => void;
@@ -38,6 +40,8 @@ export function Nav({
   onDeleteCollection,
   onSelectHighlights,
   highlightCount,
+  onSelectBookmarks,
+  bookmarkCount,
   onSearch,
   onAddFeed,
   onDeleteFeed,
@@ -86,6 +90,14 @@ export function Nav({
       >
         <span>Highlights</span>
         {highlightCount > 0 && <span className="count">{highlightCount}</span>}
+      </button>
+      <button
+        className={`nav-item ${!lensActive && view === "bookmarks" ? "active" : ""}`}
+        onClick={onSelectBookmarks}
+        aria-current={!lensActive && view === "bookmarks"}
+      >
+        <span>Bookmarks</span>
+        {bookmarkCount > 0 && <span className="count">{bookmarkCount}</span>}
       </button>
 
       {collections.length > 0 && <div className="lane-label">Research collections</div>}

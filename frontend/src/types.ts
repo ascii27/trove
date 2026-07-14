@@ -65,6 +65,28 @@ export interface Collection {
   item_count: number;
 }
 
+/** A URL kept as a bookmark (lane='bookmark') — never read in Trove. */
+export interface Bookmark {
+  id: number;
+  title: string | null;
+  source: string | null;
+  original_url: string;
+  date_saved: string;
+  publish_date: string | null;
+  favicon_url: string | null;
+  summary: string | null;
+  topics: string[];
+  extraction_status: ExtractionStatus;
+  enrichment_status: EnrichmentStatus;
+}
+
+/** True while a bookmark's metadata/AI is still being fetched — drives polling. */
+export function bookmarkPending(b: Bookmark): boolean {
+  const ex = b.extraction_status;
+  if (ex === "pending" || ex === "extracting") return true;
+  return b.enrichment_status === "pending" || b.enrichment_status === "enriching";
+}
+
 /** True while an item is actively being fetched/extracted/enriched — drives polling.
  * 'deferred' feed items are idle (they load on open), so they don't poll. */
 export function isPending(i: ItemSummary): boolean {

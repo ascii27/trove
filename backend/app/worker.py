@@ -22,6 +22,7 @@ def process_job(
     job: sqlite3.Row,
     *,
     fetch_and_extract=extract_mod.fetch_and_extract,
+    fetch_metadata=extract_mod.fetch_metadata,
     enrich=enrich_mod.enrich,
 ) -> None:
     """Run one claimed job to completion (or record failure for retry)."""
@@ -39,6 +40,20 @@ def process_job(
             ).fetchone()
             result = enrich(item["title"], item["content_text"] or "")
             store.apply_enrichment(conn, job["item_id"], result)
+            store.complete_job(conn, job["id"])
+        elif job["kind"] == "bookmark":
+            item = conn.execute(
+                "SELECT original_url FROM items WHERE id = ?", (job["item_id"],)
+            ).fetchone()
+            meta = fetch_metadata(item["original_url"])
+            enriched = None
+            if meta.body_text:
+                # AI is optional for a bookmark — a failure here still leaves a usable link.
+                try:
+                    enriched = enrich(meta.title, meta.body_text)
+                except Exception:  # noqa: BLE001
+                    enriched = None
+            store.apply_bookmark(conn, job["item_id"], meta, enriched)
             store.complete_job(conn, job["id"])
         else:  # pragma: no cover - unknown kind
             store.fail_job(conn, job, f"Unknown job kind: {job['kind']}")

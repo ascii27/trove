@@ -1,4 +1,21 @@
-import type { Feed, ItemFull, ItemSummary } from "../types";
+import type { Bookmark, Feed, ItemFull, ItemSummary } from "../types";
+
+export function bookmark(over: Partial<Bookmark> = {}): Bookmark {
+  return {
+    id: 1,
+    title: "ripgrep — fast recursive search",
+    source: "github.com",
+    original_url: "https://github.com/BurntSushi/ripgrep",
+    date_saved: "2026-07-14 10:00:00",
+    publish_date: null,
+    favicon_url: "https://github.com/favicon.ico",
+    summary: "A line-oriented search tool that respects gitignore.",
+    topics: ["CLI", "search"],
+    extraction_status: "extracted",
+    enrichment_status: "done",
+    ...over,
+  };
+}
 
 export function feed(over: Partial<Feed> = {}): Feed {
   return {
