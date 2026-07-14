@@ -25,6 +25,10 @@ vi.mock("../api", () => ({
     removeCollection: vi.fn(),
     addToCollection: vi.fn(),
     removeFromCollection: vi.fn(),
+    highlights: vi.fn(),
+    bookmarks: vi.fn(),
+    addTag: vi.fn(),
+    removeTag: vi.fn(),
   },
 }));
 
@@ -34,6 +38,8 @@ beforeEach(() => {
   vi.clearAllMocks();
   mockApi.feeds.mockResolvedValue({ feeds: [] });
   mockApi.collections.mockResolvedValue({ collections: [] });
+  mockApi.highlights.mockResolvedValue({ highlights: [] });
+  mockApi.bookmarks.mockResolvedValue({ bookmarks: [] });
 });
 
 describe("App", () => {
@@ -73,7 +79,7 @@ describe("App", () => {
     await userEvent.type(screen.getByLabelText(/url to save/i), "https://example.com/post");
     await userEvent.click(screen.getByRole("button", { name: /^save$/i }));
 
-    await waitFor(() => expect(mockApi.capture).toHaveBeenCalledWith("https://example.com/post"));
+    await waitFor(() => expect(mockApi.capture).toHaveBeenCalledWith("https://example.com/post", "saved"));
     expect(await screen.findByText(/extracting the article/i)).toBeInTheDocument();
   });
 

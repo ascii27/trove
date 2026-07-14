@@ -6,7 +6,7 @@ import sqlite3
 from . import lens as lens_mod
 from . import topics as topics_mod
 from .enrich import EnrichResult
-from .extract import Extracted
+from .extract import BookmarkMeta, Extracted
 from .feedfetch import Entry
 from .urls import canonicalize
 
@@ -30,14 +30,23 @@ def get_item_by_url(conn: sqlite3.Connection, url_canonical: str) -> sqlite3.Row
     ).fetchone()
 
 
-def create_item(conn: sqlite3.Connection, url_canonical: str, original_url: str) -> int:
-    """Insert a pending item and enqueue its extract job. Caller dedupes first."""
+def create_item(
+    conn: sqlite3.Connection,
+    url_canonical: str,
+    original_url: str,
+    lane: str = "saved",
+    job_kind: str = "extract",
+) -> int:
+    """Insert a pending item and enqueue its processing job. Caller dedupes first.
+
+    Bookmarks pass lane='bookmark', job_kind='bookmark' (light metadata + tags,
+    no stored content, no reader)."""
     cur = conn.execute(
-        "INSERT INTO items (url_canonical, original_url) VALUES (?, ?)",
-        (url_canonical, original_url),
+        "INSERT INTO items (url_canonical, original_url, lane) VALUES (?, ?, ?)",
+        (url_canonical, original_url, lane),
     )
     item_id = cur.lastrowid
-    enqueue_job(conn, item_id, "extract")
+    enqueue_job(conn, item_id, job_kind)
     return item_id
 
 
@@ -163,7 +172,7 @@ def claim_next_job(conn: sqlite3.Connection) -> sqlite3.Row | None:
     if cur.rowcount == 0:
         return None
     # reflect the incremented attempt/status
-    if row["kind"] == "extract":
+    if row["kind"] in ("extract", "bookmark"):
         conn.execute("UPDATE items SET extraction_status = 'extracting' WHERE id = ?", (row["item_id"],))
     elif row["kind"] == "enrich":
         conn.execute("UPDATE items SET enrichment_status = 'enriching' WHERE id = ?", (row["item_id"],))
@@ -482,3 +491,93 @@ def list_highlights(conn: sqlite3.Connection) -> list[dict]:
 def delete_highlight(conn: sqlite3.Connection, hid: int) -> bool:
     cur = conn.execute("DELETE FROM highlights WHERE id = ?", (hid,))
     return cur.rowcount > 0
+
+
+# -------------------------------------------------------------- bookmarks ----
+_BOOKMARK_COLS = (
+    "id, lane, title, source, original_url, date_saved, publish_date, favicon_url, "
+    "summary, extraction_status, enrichment_status"
+)
+
+
+def _host(url: str) -> str:
+    from urllib.parse import urlsplit
+
+    return urlsplit(url).netloc or url
+
+
+def apply_bookmark(
+    conn: sqlite3.Connection, item_id: int, meta: BookmarkMeta, enriched: EnrichResult | None
+) -> None:
+    """Store a bookmark's light metadata + optional AI summary/tags. The page body
+    is never persisted. A bookmark stays usable even if the fetch or AI failed."""
+    url = conn.execute("SELECT original_url FROM items WHERE id = ?", (item_id,)).fetchone()["original_url"]
+    title = meta.title or _host(url)
+    summary = enriched.summary if enriched else meta.description
+    conn.execute(
+        "UPDATE items SET title = ?, source = ?, publish_date = ?, favicon_url = ?, summary = ?, "
+        "extraction_status = ?, enrichment_status = ? WHERE id = ?",
+        (
+            title,
+            meta.source,
+            meta.publish_date,
+            meta.favicon_url,
+            summary,
+            meta.status,  # 'extracted' | 'failed'
+            "done" if enriched else "failed",
+            item_id,
+        ),
+    )
+    if enriched:
+        topics_mod.set_item_topics(conn, item_id, enriched.topics)
+
+
+def _item_topics(conn: sqlite3.Connection, item_id: int) -> list[str]:
+    return [
+        r["name"]
+        for r in conn.execute(
+            "SELECT t.name FROM topics t JOIN item_topics it ON it.topic_id = t.id "
+            "WHERE it.item_id = ? ORDER BY t.name",
+            (item_id,),
+        )
+    ]
+
+
+def list_bookmarks(conn: sqlite3.Connection) -> list[dict]:
+    """All bookmarks, newest first, each carrying its tags (topics)."""
+    rows = conn.execute(
+        f"SELECT {_BOOKMARK_COLS} FROM items WHERE lane = 'bookmark' ORDER BY date_saved DESC, id DESC"
+    ).fetchall()
+    out = []
+    for r in rows:
+        d = dict(r)
+        d["topics"] = _item_topics(conn, r["id"])
+        out.append(d)
+    return out
+
+
+def add_item_tag(conn: sqlite3.Connection, item_id: int, raw: str) -> list[str] | None:
+    """Attach a normalized tag to an item; return its updated tag list (None if item missing)."""
+    if conn.execute("SELECT 1 FROM items WHERE id = ?", (item_id,)).fetchone() is None:
+        return None
+    name = topics_mod.canonicalize(raw)
+    if name:
+        topic_id = topics_mod.upsert_topic(conn, name)
+        conn.execute(
+            "INSERT OR IGNORE INTO item_topics (item_id, topic_id) VALUES (?, ?)", (item_id, topic_id)
+        )
+    return _item_topics(conn, item_id)
+
+
+def remove_item_tag(conn: sqlite3.Connection, item_id: int, raw: str) -> list[str] | None:
+    """Detach a tag (matched by canonical name) from an item; return its updated tag list."""
+    if conn.execute("SELECT 1 FROM items WHERE id = ?", (item_id,)).fetchone() is None:
+        return None
+    name = topics_mod.canonicalize(raw)
+    if name:
+        conn.execute(
+            "DELETE FROM item_topics WHERE item_id = ? AND topic_id IN "
+            "(SELECT id FROM topics WHERE name = ? COLLATE NOCASE)",
+            (item_id, name),
+        )
+    return _item_topics(conn, item_id)

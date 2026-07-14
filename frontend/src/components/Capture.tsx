@@ -1,8 +1,11 @@
 import { useState } from "react";
 
-export function Capture({ onCapture }: { onCapture: (url: string) => Promise<void> }) {
+type Kind = "saved" | "bookmark";
+
+export function Capture({ onCapture }: { onCapture: (url: string, kind: Kind) => Promise<void> }) {
   const [open, setOpen] = useState(false);
   const [url, setUrl] = useState("");
+  const [kind, setKind] = useState<Kind>("saved");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
@@ -12,7 +15,7 @@ export function Capture({ onCapture }: { onCapture: (url: string) => Promise<voi
     setBusy(true);
     setErr(null);
     try {
-      await onCapture(url.trim());
+      await onCapture(url.trim(), kind);
       setUrl("");
       setOpen(false);
     } catch (e2) {
@@ -41,6 +44,26 @@ export function Capture({ onCapture }: { onCapture: (url: string) => Promise<voi
         onChange={(e) => setUrl(e.target.value)}
         aria-label="URL to save"
       />
+      <div className="capture-kind" role="radiogroup" aria-label="How to save this URL">
+        <button
+          type="button"
+          role="radio"
+          aria-checked={kind === "saved"}
+          className={kind === "saved" ? "on" : ""}
+          onClick={() => setKind("saved")}
+        >
+          Read later
+        </button>
+        <button
+          type="button"
+          role="radio"
+          aria-checked={kind === "bookmark"}
+          className={kind === "bookmark" ? "on" : ""}
+          onClick={() => setKind("bookmark")}
+        >
+          Bookmark
+        </button>
+      </div>
       <div className="capture-row">
         <button type="submit" disabled={busy}>
           {busy ? "Saving…" : "Save"}

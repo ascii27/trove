@@ -4,7 +4,7 @@ import { LensBar } from "./LensBar";
 
 interface Props {
   items: ItemSummary[];
-  view: "all" | "unread" | "feed" | "collection" | "highlights";
+  view: "all" | "unread" | "feed" | "collection" | "highlights" | "bookmarks";
   feedTitle: string | null;
   collectionInfo: { id: number; name: string; count: number } | null;
   loaded: boolean;

@@ -108,6 +108,8 @@ MIGRATIONS = [
     ("items", "feed_id", "ALTER TABLE items ADD COLUMN feed_id INTEGER REFERENCES feeds(id)"),
     # Sortable publish timestamp (ISO) so feed items list newest-first.
     ("items", "published_at", "ALTER TABLE items ADD COLUMN published_at TEXT"),
+    # Bookmarks lane: the site's favicon URL, shown on bookmark cards.
+    ("items", "favicon_url", "ALTER TABLE items ADD COLUMN favicon_url TEXT"),
 ]
 
 

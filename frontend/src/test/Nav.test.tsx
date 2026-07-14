@@ -20,6 +20,8 @@ function renderNav(over: Partial<React.ComponentProps<typeof Nav>> = {}) {
     onDeleteCollection: vi.fn(),
     onSelectHighlights: vi.fn(),
     highlightCount: 0,
+    onSelectBookmarks: vi.fn(),
+    bookmarkCount: 0,
     onSearch: vi.fn(),
     onAddFeed: vi.fn().mockResolvedValue(undefined),
     onDeleteFeed: vi.fn(),

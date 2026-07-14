@@ -13,6 +13,7 @@ router = APIRouter(prefix="/api")
 
 class CaptureBody(BaseModel):
     url: str
+    kind: str = "saved"  # 'saved' (read-later) | 'bookmark'
 
 
 class FeedBody(BaseModel):
@@ -35,6 +36,10 @@ class HighlightBody(BaseModel):
     end: int
 
 
+class TagBody(BaseModel):
+    name: str
+
+
 @router.get("/health")
 def health() -> dict:
     return {"status": "ok"}
@@ -45,13 +50,17 @@ def capture(body: CaptureBody) -> dict:
     url = (body.url or "").strip()
     if not url:
         raise HTTPException(status_code=422, detail="Enter a URL to save.")
+    if body.kind not in ("saved", "bookmark"):
+        raise HTTPException(status_code=422, detail="kind must be 'saved' or 'bookmark'.")
     canon = canonicalize(url)
     with db.cursor() as conn:
         existing = store.get_item_by_url(conn, canon)
         if existing is not None:
             # Duplicate capture: surface the existing item, don't make a copy (PRD §11).
             return {"item": dict(existing), "duplicate": True}
-        item_id = store.create_item(conn, canon, url)
+        lane = "bookmark" if body.kind == "bookmark" else "saved"
+        job_kind = "bookmark" if body.kind == "bookmark" else "extract"
+        item_id = store.create_item(conn, canon, url, lane=lane, job_kind=job_kind)
         item = store.get_item_by_url(conn, canon)
         return {"item": dict(item), "duplicate": False}
 
@@ -246,3 +255,30 @@ def delete_highlight(hid: int) -> dict:
         if not store.delete_highlight(conn, hid):
             raise HTTPException(status_code=404, detail="Highlight not found.")
         return {"deleted": True}
+
+
+# ------------------------------------------------------------- bookmarks ----
+@router.get("/bookmarks")
+def list_bookmarks() -> dict:
+    with db.cursor() as conn:
+        return {"bookmarks": store.list_bookmarks(conn)}
+
+
+@router.post("/items/{item_id}/tags")
+def add_tag(item_id: int, body: TagBody) -> dict:
+    if not (body.name or "").strip():
+        raise HTTPException(status_code=422, detail="Enter a tag.")
+    with db.cursor() as conn:
+        topics = store.add_item_tag(conn, item_id, body.name)
+        if topics is None:
+            raise HTTPException(status_code=404, detail="Item not found.")
+        return {"topics": topics}
+
+
+@router.delete("/items/{item_id}/tags/{name}")
+def remove_tag(item_id: int, name: str) -> dict:
+    with db.cursor() as conn:
+        topics = store.remove_item_tag(conn, item_id, name)
+        if topics is None:
+            raise HTTPException(status_code=404, detail="Item not found.")
+        return {"topics": topics}
