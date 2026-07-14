@@ -77,6 +77,10 @@ export default function App() {
 
   const loadCurrent = useCallback(
     async (v: View, fid: number | null, cid: number | null) => {
+      // Highlights/Bookmarks are their own lanes with dedicated loaders — never
+      // hit the item list endpoint for them (it rejects those view names, and
+      // polling calls their loaders separately).
+      if (v === "highlights" || v === "bookmarks") return;
       try {
         if (v === "collection" && cid != null) {
           const res = await api.getCollection(cid);
