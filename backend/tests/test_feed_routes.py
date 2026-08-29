@@ -79,3 +79,13 @@ def test_add_feed_no_feed_found(client, monkeypatch):
     monkeypatch.setattr(feedfetch, "resolve_feed", boom)
     r = client.post("/api/feeds", json={"url": "https://nope.example.com"})
     assert r.status_code == 422
+
+
+def test_opening_a_feed_item_starts_its_enrichment(client, fake_resolve):
+    fake_resolve(ParsedFeed(title="Ex", site_url=None, entries=_entries(2)))
+    fid = client.post("/api/feeds", json={"url": "https://ex.com"}).json()["feed"]["id"]
+    items = client.get(f"/api/items?view=feed&feed_id={fid}").json()["items"]
+    assert all(i["enrichment_status"] == "deferred" for i in items)
+
+    opened = client.get(f"/api/items/{items[0]['id']}").json()["item"]
+    assert opened["enrichment_status"] != "deferred"

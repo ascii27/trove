@@ -88,8 +88,8 @@ def lens(q: str = "") -> dict:
 @router.get("/items/{item_id}")
 def get_item(item_id: int) -> dict:
     with db.cursor() as conn:
-        # Opening a deferred feed item starts its extraction (lazy load).
-        store.load_if_deferred(conn, item_id)
+        # Opening an item starts what it deferred (feed fetch, AI enrichment).
+        store.on_open(conn, item_id)
         item = store.get_item(conn, item_id)
         if item is None:
             raise HTTPException(status_code=404, detail="Item not found.")

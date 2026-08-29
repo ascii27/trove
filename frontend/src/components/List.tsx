@@ -44,6 +44,9 @@ function cardBody(i: ItemSummary) {
   if (i.extraction_status === "deferred") {
     return <span className="snippet muted">Open to load the full article.</span>;
   }
+  if (i.enrichment_status === "deferred") {
+    return <span className="snippet muted">Open to load the summary.</span>;
+  }
   return <span className="snippet muted">Analyzing…</span>;
 }
 

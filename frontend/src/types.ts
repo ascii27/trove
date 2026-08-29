@@ -1,7 +1,7 @@
 export type ReadState = "unread" | "reading" | "read" | "archived";
 export type Lane = "saved" | "feed";
 export type ExtractionStatus = "pending" | "extracting" | "extracted" | "partial" | "failed" | "deferred";
-export type EnrichmentStatus = "pending" | "enriching" | "done" | "failed";
+export type EnrichmentStatus = "pending" | "enriching" | "done" | "failed" | "deferred";
 
 export interface ItemSummary {
   id: number;
@@ -88,7 +88,7 @@ export function bookmarkPending(b: Bookmark): boolean {
 }
 
 /** True while an item is actively being fetched/extracted/enriched — drives polling.
- * 'deferred' feed items are idle (they load on open), so they don't poll. */
+ * 'deferred' feed items are idle (they fetch and enrich on open), so they don't poll. */
 export function isPending(i: ItemSummary): boolean {
   const ex = i.extraction_status;
   if (ex === "deferred") return false;

@@ -11,8 +11,9 @@ from .feedfetch import Entry
 from .urls import canonicalize
 
 MAX_ATTEMPTS = 3
-# Newest N new items per poll get the full fetch/extract/enrich; the rest are
-# 'deferred' and load on first open (bounds enrichment token spend).
+# Newest N new items per poll get fetched/extracted up front; the rest are
+# 'deferred' and fetch on first open. No feed item is enriched until it's
+# opened either (enrichment_status='deferred'), so polling costs no AI tokens.
 EAGER_PER_POLL = 10
 
 # Columns returned in list views (no heavy content).
@@ -249,7 +250,7 @@ def apply_extraction(conn: sqlite3.Connection, item_id: int, result: Extracted) 
             item_id,
         ),
     )
-    if result.status in ("extracted", "partial"):
+    if result.status in ("extracted", "partial") and not _enrichment_deferred(conn, item_id):
         enqueue_job(conn, item_id, "enrich")
 
 
@@ -318,8 +319,9 @@ def ingest_entries(
     *,
     eager_limit: int = EAGER_PER_POLL,
 ) -> dict:
-    """Create items for new entries. Newest `eager_limit` get the full pipeline;
-    the rest are 'deferred'. Dedupe on canonical URL across the whole library."""
+    """Create items for new entries. Newest `eager_limit` are fetched now, the
+    rest on first open; none are enriched until opened. Dedupe on canonical URL
+    across the whole library."""
     eager = deferred = 0
     for entry in entries:
         canon = canonicalize(entry.link)
@@ -329,8 +331,8 @@ def ingest_entries(
         status = "pending" if make_eager else "deferred"
         cur = conn.execute(
             "INSERT INTO items (url_canonical, original_url, lane, feed_id, title, source, "
-            "publish_date, published_at, summary, extraction_status) "
-            "VALUES (?, ?, 'feed', ?, ?, ?, ?, ?, ?, ?)",
+            "publish_date, published_at, summary, extraction_status, enrichment_status) "
+            "VALUES (?, ?, 'feed', ?, ?, ?, ?, ?, ?, ?, 'deferred')",
             (canon, entry.link, feed_id, entry.title, feed_title, entry.published, entry.published_at, entry.summary, status),
         )
         if make_eager:
@@ -351,19 +353,36 @@ def age_feed_items(conn: sqlite3.Connection, days: int) -> int:
 
 
 def promote_to_saved(conn: sqlite3.Connection, item_id: int) -> bool:
-    row = conn.execute("SELECT lane, extraction_status FROM items WHERE id = ?", (item_id,)).fetchone()
+    row = conn.execute("SELECT lane FROM items WHERE id = ?", (item_id,)).fetchone()
     if row is None:
         return False
     conn.execute("UPDATE items SET lane = 'saved', read_state = CASE WHEN read_state='archived' THEN 'unread' ELSE read_state END WHERE id = ?", (item_id,))
-    if row["extraction_status"] == "deferred":
-        _load_deferred(conn, item_id)
+    # Saving one deliberately earns it the same work opening it would.
+    on_open(conn, item_id)
     return True
 
 
-def load_if_deferred(conn: sqlite3.Connection, item_id: int) -> None:
-    row = conn.execute("SELECT extraction_status FROM items WHERE id = ?", (item_id,)).fetchone()
-    if row is not None and row["extraction_status"] == "deferred":
+def on_open(conn: sqlite3.Connection, item_id: int) -> None:
+    """Start whatever this item deferred: feed items put off both the fetch and
+    the AI pass until you actually want to read them."""
+    row = conn.execute(
+        "SELECT extraction_status, enrichment_status FROM items WHERE id = ?", (item_id,)
+    ).fetchone()
+    if row is None:
+        return
+    if row["enrichment_status"] == "deferred":
+        # With content already in hand, enrich now; otherwise clearing the flag
+        # is enough — apply_extraction enqueues it when the fetch lands.
+        conn.execute("UPDATE items SET enrichment_status = 'pending' WHERE id = ?", (item_id,))
+        if row["extraction_status"] in ("extracted", "partial"):
+            enqueue_job(conn, item_id, "enrich")
+    if row["extraction_status"] == "deferred":
         _load_deferred(conn, item_id)
+
+
+def _enrichment_deferred(conn: sqlite3.Connection, item_id: int) -> bool:
+    row = conn.execute("SELECT enrichment_status FROM items WHERE id = ?", (item_id,)).fetchone()
+    return row is not None and row["enrichment_status"] == "deferred"
 
 
 def _load_deferred(conn: sqlite3.Connection, item_id: int) -> None:
