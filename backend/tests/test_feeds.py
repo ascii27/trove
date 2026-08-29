@@ -133,3 +133,95 @@ def test_list_feeds_unread_counts(conn):
     conn.commit()
     feeds = store.list_feeds(conn)
     assert feeds[0]["unread_count"] == 3
+
+
+# --------------------------------------------- deferred enrichment (on open) ----
+def _extracted(**kw):
+    from app.extract import Extracted
+
+    return Extracted(status="extracted", title="T", content_text="body", word_count=300, reading_minutes=2, **kw)
+
+
+def test_ingest_defers_enrichment_for_every_feed_item(conn):
+    feed_id = store.add_feed(conn, "https://ex.com/feed", None, "Ex")
+    store.ingest_entries(conn, feed_id, "Ex", _entries(12), eager_limit=10)
+    conn.commit()
+    statuses = {r["enrichment_status"] for r in conn.execute("SELECT enrichment_status FROM items WHERE lane='feed'")}
+    assert statuses == {"deferred"}
+
+
+def test_extracting_a_feed_item_does_not_enqueue_enrich(conn):
+    feed_id = store.add_feed(conn, "https://ex.com/feed", None, "Ex")
+    store.ingest_entries(conn, feed_id, "Ex", _entries(1), eager_limit=10)
+    conn.commit()
+    item_id = conn.execute("SELECT id FROM items WHERE lane='feed'").fetchone()["id"]
+
+    store.apply_extraction(conn, item_id, _extracted())
+    conn.commit()
+
+    kinds = [j["kind"] for j in conn.execute("SELECT kind FROM jobs WHERE item_id=?", (item_id,))]
+    assert "enrich" not in kinds
+
+
+def test_opening_an_extracted_feed_item_enqueues_enrich(conn):
+    feed_id = store.add_feed(conn, "https://ex.com/feed", None, "Ex")
+    store.ingest_entries(conn, feed_id, "Ex", _entries(1), eager_limit=10)
+    item_id = conn.execute("SELECT id FROM items WHERE lane='feed'").fetchone()["id"]
+    store.apply_extraction(conn, item_id, _extracted())
+    conn.commit()
+
+    store.on_open(conn, item_id)
+    conn.commit()
+
+    row = conn.execute("SELECT enrichment_status FROM items WHERE id=?", (item_id,)).fetchone()
+    assert row["enrichment_status"] == "pending"
+    kinds = [j["kind"] for j in conn.execute("SELECT kind FROM jobs WHERE item_id=?", (item_id,))]
+    assert kinds.count("enrich") == 1
+
+
+def test_opening_a_deferred_feed_item_chains_extract_then_enrich(conn):
+    feed_id = store.add_feed(conn, "https://ex.com/feed", None, "Ex")
+    store.ingest_entries(conn, feed_id, "Ex", _entries(11), eager_limit=10)
+    conn.commit()
+    item_id = conn.execute("SELECT id FROM items WHERE extraction_status='deferred'").fetchone()["id"]
+
+    store.on_open(conn, item_id)
+    conn.commit()
+    kinds = [j["kind"] for j in conn.execute("SELECT kind FROM jobs WHERE item_id=?", (item_id,))]
+    assert kinds == ["extract"]  # nothing to enrich until there's content
+
+    store.apply_extraction(conn, item_id, _extracted())
+    conn.commit()
+    kinds = [j["kind"] for j in conn.execute("SELECT kind FROM jobs WHERE item_id=?", (item_id,))]
+    assert kinds.count("enrich") == 1
+
+
+def test_opening_twice_enqueues_only_one_enrich(conn):
+    feed_id = store.add_feed(conn, "https://ex.com/feed", None, "Ex")
+    store.ingest_entries(conn, feed_id, "Ex", _entries(1), eager_limit=10)
+    item_id = conn.execute("SELECT id FROM items WHERE lane='feed'").fetchone()["id"]
+    store.apply_extraction(conn, item_id, _extracted())
+    conn.commit()
+
+    store.on_open(conn, item_id)
+    store.on_open(conn, item_id)
+    conn.commit()
+
+    kinds = [j["kind"] for j in conn.execute("SELECT kind FROM jobs WHERE item_id=?", (item_id,))]
+    assert kinds.count("enrich") == 1
+
+
+def test_promote_to_saved_clears_the_enrichment_deferral(conn):
+    feed_id = store.add_feed(conn, "https://ex.com/feed", None, "Ex")
+    store.ingest_entries(conn, feed_id, "Ex", _entries(1), eager_limit=10)
+    item_id = conn.execute("SELECT id FROM items WHERE lane='feed'").fetchone()["id"]
+    store.apply_extraction(conn, item_id, _extracted())
+    conn.commit()
+
+    assert store.promote_to_saved(conn, item_id)
+    conn.commit()
+
+    row = conn.execute("SELECT enrichment_status FROM items WHERE id=?", (item_id,)).fetchone()
+    assert row["enrichment_status"] == "pending"
+    kinds = [j["kind"] for j in conn.execute("SELECT kind FROM jobs WHERE item_id=?", (item_id,))]
+    assert kinds.count("enrich") == 1

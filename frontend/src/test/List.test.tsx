@@ -71,6 +71,21 @@ describe("List", () => {
     expect(screen.getByText(/extracting the article/i)).toBeInTheDocument();
   });
 
+  it("invites you to open a feed item whose summary hasn't been generated yet", () => {
+    render(
+      <List
+        items={[summary({ lane: "feed", extraction_status: "extracted", enrichment_status: "deferred", summary: null })]}
+        view="all" feedTitle={null}
+        loaded
+        selectedId={null}
+        notice={null}
+        error={null} lensQuery="" onLensChange={noop} lensFocusTick={0} lensInfo={null} collectionInfo={null} onSaveAsCollection={async () => {}} onRemoveFromCollection={noop}
+        onSelect={noop} onDelete={noop} onBackToNav={noop}
+      />
+    );
+    expect(screen.getByText(/open to load the summary/i)).toBeInTheDocument();
+  });
+
   it("offers a back-to-menu control (mobile) that fires onBackToNav", async () => {
     const onBackToNav = vi.fn();
     render(

@@ -30,7 +30,7 @@ CREATE TABLE IF NOT EXISTS items (
     date_saved        TEXT NOT NULL DEFAULT (datetime('now')),
     read_state        TEXT NOT NULL DEFAULT 'unread',     -- unread|reading|read|archived
     extraction_status TEXT NOT NULL DEFAULT 'pending',    -- pending|extracting|extracted|partial|failed
-    enrichment_status TEXT NOT NULL DEFAULT 'pending',    -- pending|enriching|done|failed
+    enrichment_status TEXT NOT NULL DEFAULT 'pending',    -- pending|enriching|done|failed|deferred
     summary           TEXT,
     category          TEXT,
     source_type       TEXT,                               -- primary|secondary|analysis
