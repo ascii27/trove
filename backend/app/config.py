@@ -37,3 +37,28 @@ def feed_age_days() -> int:
 
 def feed_age_sweep_seconds() -> int:
     return int(os.environ.get("TROVE_FEED_AGE_SWEEP_SECONDS", "3600"))  # hourly
+
+
+# ---- X (Twitter) ----
+# Two ways to pull posts. The official X API v2 (pay-per-use; set a bearer token)
+# gives threads, media, and full long-form text. Without one, an RSS bridge you
+# run (RSSHub, Nitter, …) works too: set a URL template containing {handle}.
+def x_bearer_token() -> str | None:
+    return os.environ.get("TROVE_X_BEARER_TOKEN") or None
+
+
+def x_rss_template() -> str | None:
+    return os.environ.get("TROVE_X_RSS_TEMPLATE") or None
+
+
+def x_api_base() -> str:
+    return os.environ.get("TROVE_X_API_BASE", "https://api.x.com/2")
+
+
+def x_poll_seconds() -> int:
+    return int(os.environ.get("TROVE_X_POLL_SECONDS", "3600"))  # hourly — API reads are billed
+
+
+def x_max_results() -> int:
+    """Posts requested per poll (API allows 5–100)."""
+    return max(5, min(100, int(os.environ.get("TROVE_X_MAX_RESULTS", "50"))))

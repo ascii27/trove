@@ -1,4 +1,15 @@
-import type { Bookmark, Collection, Feed, Highlight, HighlightArchiveEntry, ItemFull, ItemSummary } from "./types";
+import type {
+  Bookmark,
+  Collection,
+  Feed,
+  Highlight,
+  HighlightArchiveEntry,
+  ItemFull,
+  ItemSummary,
+  XAccount,
+  XPost,
+  XStatus,
+} from "./types";
 
 async function req<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(path, {
@@ -97,4 +108,25 @@ export const api = {
     }),
   removeTag: (itemId: number, name: string) =>
     req<{ topics: string[] }>(`/api/items/${itemId}/tags/${encodeURIComponent(name)}`, { method: "DELETE" }),
+
+  xStatus: () => req<XStatus>("/api/x/status"),
+  xAccounts: () => req<{ accounts: XAccount[]; unread_count: number }>("/api/x/accounts"),
+  followX: (handle: string) =>
+    req<{ account: XAccount; duplicate: boolean }>("/api/x/accounts", {
+      method: "POST",
+      body: JSON.stringify({ handle }),
+    }),
+  unfollowX: (id: number) => req<{ deleted: boolean }>(`/api/x/accounts/${id}`, { method: "DELETE" }),
+  refreshX: (id: number) => req<{ account: XAccount }>(`/api/x/accounts/${id}/refresh`, { method: "POST" }),
+  xPosts: (accountId?: number | null) =>
+    req<{ posts: XPost[]; unread_count: number }>(
+      `/api/x/posts${accountId != null ? `?account_id=${accountId}` : ""}`
+    ),
+  markXPosts: (ids: number[], state: "read" | "unread") =>
+    req<{ updated: number; unread_count: number }>("/api/x/posts/read", {
+      method: "POST",
+      body: JSON.stringify({ ids, state }),
+    }),
+  setXTheme: (id: number, theme: string | null) =>
+    req<{ post: XPost }>(`/api/x/posts/${id}/theme`, { method: "PUT", body: JSON.stringify({ theme }) }),
 };

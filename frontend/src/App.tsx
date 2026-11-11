@@ -6,6 +6,8 @@ import { List } from "./components/List";
 import { HighlightsList } from "./components/HighlightsList";
 import { BookmarksList } from "./components/BookmarksList";
 import { Reader } from "./components/Reader";
+import { XStream } from "./components/XStream";
+import type { Grouping } from "./xgroup";
 import {
   bookmarkPending,
   isPending,
@@ -15,9 +17,23 @@ import {
   type HighlightArchiveEntry,
   type ItemFull,
   type ItemSummary,
+  type XAccount,
+  type XPost,
+  type XStatus,
 } from "./types";
 
-type View = "all" | "unread" | "feed" | "collection" | "highlights" | "bookmarks";
+type View = "all" | "unread" | "feed" | "collection" | "highlights" | "bookmarks" | "x";
+
+const GROUPING_KEY = "trove.x.grouping";
+function initialGrouping(): Grouping {
+  try {
+    const g = localStorage.getItem(GROUPING_KEY);
+    if (g === "date" || g === "theme" || g === "tag") return g;
+  } catch {
+    /* storage unavailable */
+  }
+  return "date";
+}
 
 export default function App() {
   const [view, setView] = useState<View>("all");
@@ -42,6 +58,13 @@ export default function App() {
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
+  // X lane: followed accounts and their posts, read as a grouped stream.
+  const [xStatus, setXStatus] = useState<XStatus | null>(null);
+  const [xAccounts, setXAccounts] = useState<XAccount[]>([]);
+  const [xUnread, setXUnread] = useState(0);
+  const [xAccountId, setXAccountId] = useState<number | null>(null);
+  const [xPosts, setXPosts] = useState<XPost[]>([]);
+  const [xGrouping, setXGrouping] = useState<Grouping>(initialGrouping);
 
   const loadFeeds = useCallback(async () => {
     try {
@@ -75,12 +98,32 @@ export default function App() {
     }
   }, []);
 
+  const loadXAccounts = useCallback(async () => {
+    try {
+      const res = await api.xAccounts();
+      setXAccounts(res.accounts);
+      setXUnread(res.unread_count);
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  const loadXPosts = useCallback(async (accountId: number | null) => {
+    try {
+      const res = await api.xPosts(accountId);
+      setXPosts(res.posts);
+      setXUnread(res.unread_count);
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  }, []);
+
   const loadCurrent = useCallback(
     async (v: View, fid: number | null, cid: number | null) => {
       // Highlights/Bookmarks are their own lanes with dedicated loaders — never
       // hit the item list endpoint for them (it rejects those view names, and
       // polling calls their loaders separately).
-      if (v === "highlights" || v === "bookmarks") return;
+      if (v === "highlights" || v === "bookmarks" || v === "x") return;
       try {
         if (v === "collection" && cid != null) {
           const res = await api.getCollection(cid);
@@ -126,17 +169,31 @@ export default function App() {
     loadCollections();
     loadHighlights();
     loadBookmarks();
-  }, [loadFeeds, loadCollections, loadHighlights, loadBookmarks]);
+    loadXAccounts();
+    api.xStatus().then(setXStatus).catch(() => {});
+  }, [loadFeeds, loadCollections, loadHighlights, loadBookmarks, loadXAccounts]);
   useEffect(() => {
     setLoaded(false);
     if (view === "highlights") {
       loadHighlights().then(() => setLoaded(true));
     } else if (view === "bookmarks") {
       loadBookmarks().then(() => setLoaded(true));
+    } else if (view === "x") {
+      loadXPosts(xAccountId).then(() => setLoaded(true));
     } else {
       loadCurrent(view, feedId, collectionId);
     }
-  }, [view, feedId, collectionId, loadCurrent, loadHighlights, loadBookmarks]);
+  }, [view, feedId, collectionId, xAccountId, loadCurrent, loadHighlights, loadBookmarks, loadXPosts]);
+
+  // While reading X, quietly pick up new posts and themes as the worker lands them.
+  useEffect(() => {
+    if (view !== "x") return;
+    const id = setInterval(() => {
+      loadXPosts(xAccountId);
+      loadXAccounts();
+    }, 60000);
+    return () => clearInterval(id);
+  }, [view, xAccountId, loadXPosts, loadXAccounts]);
 
   // Poll while anything visible is still extracting/enriching.
   const anyPending =
@@ -186,6 +243,8 @@ export default function App() {
   );
 
   const onSearch = useCallback(() => {
+    // The search bar lives in the item list; leave the X stream to show it.
+    setView((v) => (v === "x" ? "all" : v));
     setListOpen(true);
     setSelectedId(null); // land on the list/search screen, not a lingering reader
     setSelected(null);
@@ -407,6 +466,112 @@ export default function App() {
     setBookmarks((prev) => prev.map((b) => (b.id === id ? { ...b, topics } : b)));
   }, []);
 
+  // --- X ---
+  const onSelectX = useCallback((accountId: number | null) => {
+    setView("x");
+    setXAccountId(accountId);
+    setFeedId(null);
+    setCollectionId(null);
+    setListOpen(true);
+    setLensQuery("");
+    setSelectedId(null);
+    setSelected(null);
+  }, []);
+
+  const onFollowX = useCallback(
+    async (handle: string) => {
+      const res = await api.followX(handle);
+      await loadXAccounts();
+      const who = res.account.name ?? `@${res.account.handle}`;
+      setNotice(res.duplicate ? `You already follow ${who}.` : `Following ${who}.`);
+      onSelectX(res.account.id);
+    },
+    [loadXAccounts, onSelectX]
+  );
+
+  const onUnfollowX = useCallback(
+    async (id: number) => {
+      await api.unfollowX(id);
+      await loadXAccounts();
+      if (view === "x") {
+        if (xAccountId === id) setXAccountId(null);
+        else loadXPosts(xAccountId);
+      }
+    },
+    [view, xAccountId, loadXAccounts, loadXPosts]
+  );
+
+  const onRefreshX = useCallback(
+    async (id: number) => {
+      await api.refreshX(id);
+      await Promise.all([loadXPosts(xAccountId), loadXAccounts()]);
+    },
+    [xAccountId, loadXPosts, loadXAccounts]
+  );
+
+  const onGroupingChange = useCallback((g: Grouping) => {
+    setXGrouping(g);
+    try {
+      localStorage.setItem(GROUPING_KEY, g);
+    } catch {
+      /* storage unavailable */
+    }
+  }, []);
+
+  const patchPost = useCallback((id: number, patch: Partial<XPost>) => {
+    setXPosts((prev) => prev.map((p) => (p.id === id ? { ...p, ...patch } : p)));
+  }, []);
+
+  const onMarkX = useCallback(
+    async (ids: number[], state: "read" | "unread") => {
+      const set = new Set(ids);
+      setXPosts((prev) => prev.map((p) => (set.has(p.id) ? { ...p, read_state: state } : p)));
+      try {
+        const res = await api.markXPosts(ids, state);
+        setXUnread(res.unread_count);
+        loadXAccounts();
+      } catch (e) {
+        setError((e as Error).message);
+      }
+    },
+    [loadXAccounts]
+  );
+
+  const onAddXTag = useCallback(
+    async (id: number, name: string) => patchPost(id, { topics: (await api.addTag(id, name)).topics }),
+    [patchPost]
+  );
+  const onRemoveXTag = useCallback(
+    async (id: number, name: string) => patchPost(id, { topics: (await api.removeTag(id, name)).topics }),
+    [patchPost]
+  );
+  const onSetXTheme = useCallback(
+    async (id: number, theme: string | null) => patchPost(id, { theme: (await api.setXTheme(id, theme)).post.theme }),
+    [patchPost]
+  );
+  const onAddXHighlight = useCallback(
+    async (id: number, sel: { quote: string; start: number; end: number }) => {
+      const { highlight } = await api.addHighlight(id, sel);
+      setXPosts((prev) =>
+        prev.map((p) =>
+          p.id === id
+            ? { ...p, highlights: [...p.highlights, highlight].sort((a, b) => a.start_offset - b.start_offset) }
+            : p
+        )
+      );
+      loadHighlights();
+    },
+    [loadHighlights]
+  );
+  const onRemoveXHighlight = useCallback(
+    async (hid: number) => {
+      await api.removeHighlight(hid);
+      setXPosts((prev) => prev.map((p) => ({ ...p, highlights: p.highlights.filter((h) => h.id !== hid) })));
+      loadHighlights();
+    },
+    [loadHighlights]
+  );
+
   // onCapture opens a reader item; make sure the mobile list is "entered" too.
   useEffect(() => {
     if (selectedId != null) setListOpen(true);
@@ -420,7 +585,11 @@ export default function App() {
       : null;
 
   return (
-    <div className={`app${listOpen ? " list-open" : ""}${selectedId != null ? " reading" : ""}`}>
+    <div
+      className={`app${listOpen ? " list-open" : ""}${selectedId != null ? " reading" : ""}${
+        view === "x" && !lensActive ? " wide" : ""
+      }`}
+    >
       <Nav
         view={view}
         feedId={feedId}
@@ -450,8 +619,32 @@ export default function App() {
         onAddFeed={onAddFeed}
         onDeleteFeed={onDeleteFeed}
         captureSlot={<Capture onCapture={onCapture} />}
+        xAccounts={xAccounts}
+        xAccountId={xAccountId}
+        xUnreadCount={xUnread}
+        onSelectX={onSelectX}
+        onFollowX={onFollowX}
+        onUnfollowX={onUnfollowX}
       />
-      {view === "highlights" ? (
+      {view === "x" && !lensActive ? (
+        <XStream
+          posts={xPosts}
+          account={xAccounts.find((a) => a.id === xAccountId) ?? null}
+          status={xStatus}
+          loaded={loaded}
+          error={error}
+          grouping={xGrouping}
+          onGroupingChange={onGroupingChange}
+          onMark={onMarkX}
+          onAddTag={onAddXTag}
+          onRemoveTag={onRemoveXTag}
+          onSetTheme={onSetXTheme}
+          onAddHighlight={onAddXHighlight}
+          onRemoveHighlight={onRemoveXHighlight}
+          onRefresh={onRefreshX}
+          onBackToNav={onBackToNav}
+        />
+      ) : view === "highlights" ? (
         <HighlightsList
           highlights={highlightsArchive}
           loaded={loaded}
@@ -472,7 +665,7 @@ export default function App() {
       ) : (
         <List
           items={displayItems}
-          view={view}
+          view={view === "x" ? "all" : view}
           feedTitle={view === "feed" ? feeds.find((f) => f.id === feedId)?.title ?? "Feed" : null}
           collectionInfo={collectionInfo}
           loaded={loaded}

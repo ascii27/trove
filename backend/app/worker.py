@@ -14,7 +14,7 @@ import time
 from . import config, db, store
 from . import enrich as enrich_mod
 from . import extract as extract_mod
-from . import feedfetch
+from . import feedfetch, xsource, xstore, xthemes
 
 
 def process_job(
@@ -84,6 +84,47 @@ def poll_feed(conn: sqlite3.Connection, feed: sqlite3.Row, *, resolve=feedfetch.
         return {"eager": 0, "deferred": 0, "error": str(exc)}
 
 
+def poll_x_account(conn: sqlite3.Connection, account: sqlite3.Row, source) -> dict:
+    """Fetch an account's new posts (since the newest we've seen) and ingest them,
+    stitching self-threads into single items. Records last_error on failure."""
+    try:
+        profile = xsource.XProfile(
+            handle=account["handle"], user_id=account["user_id"], name=account["name"],
+            avatar_url=account["avatar_url"],
+        )
+        if source.mode == "api" and not profile.user_id:
+            profile = source.lookup(profile.handle)
+            xstore.update_profile(conn, account["id"], profile)
+            account = xstore.get_account(conn, account["id"])
+        posts = source.fetch(profile, account["last_seen_id"], config.x_max_results())
+        counts = xstore.ingest_threads(conn, account, xsource.stitch_threads(posts))
+        xstore.mark_polled(conn, account["id"], None)
+        conn.commit()
+        return counts
+    except Exception as exc:  # noqa: BLE001 - a bad account must not kill the worker
+        conn.rollback()
+        msg = str(exc) if isinstance(exc, xsource.XError) else f"{exc.__class__.__name__}: {exc}"
+        xstore.mark_polled(conn, account["id"], msg)
+        conn.commit()
+        return {"created": 0, "appended": 0, "error": msg}
+
+
+def theme_posts(conn: sqlite3.Connection, *, classify=xthemes.classify, batch: int = xthemes.BATCH_SIZE) -> int:
+    """Assign themes to one batch of unthemed posts. Returns how many were themed.
+    Without an Anthropic key this is a no-op (posts group under "Not yet sorted")."""
+    rows = xstore.unthemed_posts(conn, batch)
+    if not rows:
+        return 0
+    inputs = [xthemes.ThemeInput(id=r["id"], author=r["author"], text=r["content_text"] or r["title"] or "") for r in rows]
+    themes = classify(inputs, xstore.existing_themes(conn))
+    # Anything the model skipped becomes 'Misc' so it isn't re-sent forever.
+    for r in rows:
+        themes.setdefault(r["id"], "Misc")
+    xstore.apply_themes(conn, themes)
+    conn.commit()
+    return len(themes)
+
+
 class Worker:
     def __init__(self, db_path: str | None = None, poll: float = 1.0, maint_interval: float = 30.0):
         self.db_path = db_path
@@ -92,13 +133,25 @@ class Worker:
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
         self._last_age = 0.0
+        self._theme_backoff_until = 0.0
 
     def _maintenance(self, conn: sqlite3.Connection) -> None:
         for feed in store.feeds_due(conn, config.feed_poll_seconds()):
             poll_feed(conn, feed)
+        source = xsource.get_source()
+        if source is not None:
+            for account in xstore.accounts_due(conn, config.x_poll_seconds()):
+                poll_x_account(conn, account, source)
         now = time.monotonic()
+        if config.anthropic_api_key() and now >= self._theme_backoff_until:
+            try:
+                theme_posts(conn)
+            except Exception:  # noqa: BLE001 - themes are a nicety; back off and retry later
+                conn.rollback()
+                self._theme_backoff_until = now + 900
         if now - self._last_age >= config.feed_age_sweep_seconds():
             store.age_feed_items(conn, config.feed_age_days())
+            xstore.age_posts(conn, config.feed_age_days())
             conn.commit()
             self._last_age = now
 

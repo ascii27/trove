@@ -1,4 +1,4 @@
-import type { Bookmark, Feed, ItemFull, ItemSummary } from "../types";
+import type { Bookmark, Feed, ItemFull, ItemSummary, XAccount, XPost } from "../types";
 
 export function bookmark(over: Partial<Bookmark> = {}): Bookmark {
   return {
@@ -61,6 +61,41 @@ export function full(over: Partial<ItemFull> = {}): ItemFull {
     topics: ["AI", "platform engineering"],
     claims: ["Mandated platforms rot.", "Cognitive load predicts uptake."],
     collection_ids: [],
+    highlights: [],
+    ...over,
+  };
+}
+
+export function xAccount(over: Partial<XAccount> = {}): XAccount {
+  return {
+    id: 1,
+    handle: "jane",
+    name: "Jane Doe",
+    avatar_url: null,
+    last_polled_at: "2026-11-11 10:00:00",
+    last_error: null,
+    unread_count: 2,
+    ...over,
+  };
+}
+
+export function xPost(over: Partial<XPost> = {}): XPost {
+  return {
+    id: 1,
+    x_account_id: 1,
+    post_id: "100",
+    thread_len: 1,
+    theme: "AI agents",
+    title: "Agents need better evals",
+    author: "Jane Doe",
+    handle: "jane",
+    avatar_url: null,
+    original_url: "https://x.com/jane/status/100",
+    published_at: "2026-11-11T09:00:00",
+    date_saved: "2026-11-11 09:05:00",
+    read_state: "unread",
+    content_text: "Agents need better evals.",
+    topics: [],
     highlights: [],
     ...over,
   };
