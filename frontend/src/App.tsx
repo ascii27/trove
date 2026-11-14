@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { api, type LensResponse } from "./api";
 import { Capture } from "./components/Capture";
 import { Nav } from "./components/Nav";
@@ -60,6 +60,8 @@ export default function App() {
   const [matchedTopics, setMatchedTopics] = useState<string[]>([]);
   const [lensFocusTick, setLensFocusTick] = useState(0);
   const [notice, setNotice] = useState<string | null>(null);
+  // Discover's own status line, so its messages never land on another view.
+  const [discoverNotice, setDiscoverNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
   // X lane: followed accounts and their posts, read as a grouped stream.
@@ -132,7 +134,7 @@ export default function App() {
       const prev = discoverRunRef.current;
       if (prev?.status === "running" && next.run?.id === prev.id && next.run.status === "done") {
         const n = next.run.found;
-        setNotice(n > 0 ? `Found ${n} new suggestion${n === 1 ? "" : "s"}.` : "Nothing new turned up this time.");
+        setDiscoverNotice(n > 0 ? `Found ${n} new suggestion${n === 1 ? "" : "s"}.` : "Nothing new turned up this time.");
       }
       discoverRunRef.current = next.run;
       setDiscover(next);
@@ -556,7 +558,7 @@ export default function App() {
   }, []);
 
   const onStartDiscover = useCallback(async (context: string, kinds: DiscoverKinds) => {
-    setNotice(null);
+    setDiscoverNotice(null);
     const { run } = await api.startDiscover(context, kinds);
     discoverRunRef.current = run;
     setDiscover((prev) => (prev ? { ...prev, run } : prev));
@@ -572,10 +574,10 @@ export default function App() {
       dropSuggestion(s.id);
       if (s.kind === "blog") {
         await loadFeeds();
-        setNotice(res.duplicate ? `You already follow ${s.name}.` : `Subscribed to ${s.name}.`);
+        setDiscoverNotice(res.duplicate ? `You already follow ${s.name}.` : `Subscribed to ${s.name}.`);
       } else {
         await loadXAccounts();
-        setNotice(res.duplicate ? `You already follow ${s.name}.` : `Following ${s.name}.`);
+        setDiscoverNotice(res.duplicate ? `You already follow ${s.name}.` : `Following ${s.name}.`);
       }
     },
     [dropSuggestion, loadFeeds, loadXAccounts]
@@ -657,6 +659,31 @@ export default function App() {
     if (selectedId != null) setListOpen(true);
   }, [selectedId]);
 
+  // Phones scroll the window, one level (menu / list / reader) at a time, so give
+  // each new screen its own scroll: start at the top, except coming back from the
+  // reader, which returns to where you were in the list.
+  const mobileLevel = selectedId != null ? "reader" : listOpen ? "list" : "nav";
+  const paneKey = `${view}|${feedId}|${collectionId}|${xAccountId}`;
+  const listScrollY = useRef(0);
+  const levelRef = useRef(mobileLevel);
+  const prevScreen = useRef({ pane: paneKey, level: mobileLevel, item: selectedId });
+  useEffect(() => {
+    const onScroll = () => {
+      if (levelRef.current === "list") listScrollY.current = window.scrollY;
+    };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+  useLayoutEffect(() => {
+    const prev = prevScreen.current;
+    prevScreen.current = { pane: paneKey, level: mobileLevel, item: selectedId };
+    levelRef.current = mobileLevel;
+    const same = prev.pane === paneKey && prev.level === mobileLevel && prev.item === selectedId;
+    if (same || !window.matchMedia?.("(max-width: 820px)").matches) return;
+    const backToList = prev.level === "reader" && mobileLevel === "list" && prev.pane === paneKey;
+    window.scrollTo(0, backToList ? listScrollY.current : 0);
+  }, [paneKey, mobileLevel, selectedId]);
+
   const lensActive = lensQuery.trim() !== "";
   const displayItems = lensActive ? lensResults?.items ?? [] : items;
   const collectionInfo =
@@ -711,7 +738,7 @@ export default function App() {
       {view === "discover" && !lensActive ? (
         <Discover
           state={discover}
-          notice={notice}
+          notice={discoverNotice}
           onStart={onStartDiscover}
           onFollow={onFollowSuggestion}
           onDismiss={onDismissSuggestion}

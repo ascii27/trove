@@ -65,7 +65,7 @@ def x_max_results() -> int:
 
 
 # ---- Discovery ----
-# Suggests blogs and X accounts with a web-searching Claude call. Runs only when
+# Suggests blogs and X accounts with one Claude call. Runs only when
 # you ask (it isn't on a schedule), so a more capable model than enrichment's is fine.
 def discover_model() -> str:
     return os.environ.get("TROVE_DISCOVER_MODEL", "claude-opus-5-5")
@@ -74,6 +74,3 @@ def discover_model() -> str:
 def discover_effort() -> str:
     return os.environ.get("TROVE_DISCOVER_EFFORT", "medium")
 
-
-def discover_max_searches() -> int:
-    return max(1, min(20, int(os.environ.get("TROVE_DISCOVER_MAX_SEARCHES", "8"))))

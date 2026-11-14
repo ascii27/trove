@@ -257,5 +257,10 @@ describe("App", () => {
     expect(mockApi.followSuggestion).toHaveBeenCalledWith(11);
     expect(await screen.findByText("Subscribed to Wine Folly.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /^Wine Folly/ })).toBeInTheDocument(); // now in the nav
+
+    // Discover's messages stay on Discover.
+    await userEvent.click(screen.getByRole("button", { name: /^All saved/ }));
+    expect(screen.queryByText("Subscribed to Wine Folly.")).not.toBeInTheDocument();
+    expect(screen.queryByText("Found 1 new suggestion.")).not.toBeInTheDocument();
   }, 10000);
 });

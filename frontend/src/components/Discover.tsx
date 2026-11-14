@@ -172,14 +172,14 @@ export function Discover({ state, notice, onStart, onFollow, onDismiss, onBackTo
               ))}
             </div>
             <button type="submit" className="disc-go" disabled={running}>
-              {running ? "Searching…" : "Find suggestions"}
+              {running ? "Finding…" : "Find suggestions"}
             </button>
           </div>
         </form>
         {running && (
           <p className="disc-progress" role="status">
-            Searching the web{run?.context ? ` for “${run.context}”` : ""}. This takes a minute or two — you can keep
-            reading meanwhile.
+            Finding writers{run?.context ? ` for “${run.context}”` : ""} and checking their feeds. This takes about a
+            minute — you can keep reading meanwhile.
           </p>
         )}
         {!running && run?.status === "failed" && run.error && <div className="banner-error">{run.error}</div>}

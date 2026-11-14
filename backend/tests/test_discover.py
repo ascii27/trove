@@ -90,38 +90,34 @@ def test_prompt_focuses_on_context_and_lists_exclusions():
     assert "@karpathy (Andrej)" in text and "- @already" in text
 
 
-# --------------------------------------------------------------- loop ----
-def test_research_resumes_pause_turn_and_nudges_for_submit():
-    client = FakeClient([
-        SimpleNamespace(stop_reason="pause_turn", content=[_block("server_tool_use", name="web_search")]),
-        SimpleNamespace(stop_reason="end_turn", content=[_block("text", text="Here are some ideas")]),
-        SimpleNamespace(stop_reason="tool_use",
-                        content=[_block("tool_use", name="submit_suggestions", input=PICKS)]),
-    ])
-    out = discover.research("prompt", client=client, model="claude-opus-5-5")
-    assert out == PICKS
-    assert len(client.calls) == 3
-    # pause_turn resumes with no extra user turn; end_turn gets exactly one nudge.
-    assert [m["role"] for m in client.calls[1]["messages"]] == ["user", "assistant"]
-    assert client.calls[2]["messages"][-1]["content"].startswith("Call submit_suggestions")
-    tools = client.calls[0]["tools"]
-    assert tools[0]["type"] == "web_search_20260209" and tools[1]["name"] == "submit_suggestions"
-    assert client.calls[0]["fallbacks"] == "default"
+# --------------------------------------------------------------- call ----
+def _json_resp(data, stop="end_turn"):
+    import json as _json
+    return SimpleNamespace(stop_reason=stop, content=[_block("thinking", thinking=""), _block("text", text=_json.dumps(data))])
 
 
-def test_research_gives_up_after_one_nudge():
-    talk = SimpleNamespace(stop_reason="end_turn", content=[_block("text", text="hmm")])
-    with pytest.raises(discover.DiscoverError):
-        discover.research("p", client=FakeClient([talk, talk]), model="claude-opus-5-5")
+def test_research_asks_for_structured_json():
+    client = FakeClient([_json_resp(PICKS)])
+    assert discover.research("prompt", client=client, model="claude-opus-5-5") == PICKS
+    call = client.calls[0]
+    assert "tools" not in call
+    assert call["output_config"]["format"]["type"] == "json_schema"
+    assert call["output_config"]["effort"] == "medium"
+    assert call["fallbacks"] == "default"
 
 
-def test_research_uses_basic_search_on_older_models():
-    client = FakeClient([SimpleNamespace(stop_reason="tool_use",
-                                         content=[_block("tool_use", name="submit_suggestions", input=PICKS)])])
+def test_research_refusal_and_truncation_are_errors():
+    with pytest.raises(discover.DiscoverError, match="declined"):
+        discover.research("p", client=FakeClient([_json_resp({}, stop="refusal")]), model="claude-opus-5-5")
+    with pytest.raises(discover.DiscoverError, match="cut off"):
+        discover.research("p", client=FakeClient([_json_resp({}, stop="max_tokens")]), model="claude-opus-5-5")
+
+
+def test_research_on_older_models_skips_effort_and_fallbacks():
+    client = FakeClient([_json_resp(PICKS)])
     discover.research("p", client=client, model="claude-haiku-4-5")
     call = client.calls[0]
-    assert call["tools"][0]["type"] == "web_search_20250305"
-    assert "fallbacks" not in call and "output_config" not in call
+    assert "fallbacks" not in call and "effort" not in call["output_config"]
 
 
 # -------------------------------------------------------- verification ----
@@ -131,6 +127,36 @@ def test_verify_blogs_drops_unresolvable_and_followed():
     out = discover.verify_blogs(blogs, {"https://mine.example/feed"}, resolve=_resolve)
     assert [c.name for c in out] == ["Wine Folly"]
     assert out[0].feed_url == "https://winefolly.com/feed"
+
+
+def test_verify_blogs_tries_common_feed_paths():
+    # The homepage doesn't advertise a feed, but /feed/ exists (Wine Folly, live).
+    def resolve(url):
+        if url != "https://winefolly.com/feed/":
+            raise feedfetch.FeedError("no feed")
+        return url, _parsed()
+
+    out = discover.verify_blogs(PICKS["blogs"][:1], set(), resolve=resolve)
+    assert [c.feed_url for c in out] == ["https://winefolly.com/feed/"]
+
+
+def test_verify_blogs_drops_dormant_feeds_and_keeps_the_first_n():
+    from datetime import datetime
+
+    def parsed(when):
+        e = Entry(title="t", link="https://a/1", summary=None, published=None, published_at=when)
+        return ParsedFeed(title="x", site_url=None, entries=[e])
+
+    blogs = [{"name": f"b{i}", "url": f"https://b{i}.example", "feed_url": "", "description": "",
+              "reason": "", "topics": []} for i in range(4)]
+    dates = {"b0": "2024-01-01T00:00:00", "b1": "2026-10-01T00:00:00", "b2": None, "b3": "2026-11-01T00:00:00"}
+
+    def resolve(url):
+        name = url.split("//")[1].split(".")[0]
+        return f"https://{name}.example/feed", parsed(dates[name])
+
+    out = discover.verify_blogs(blogs, set(), resolve=resolve, now=datetime(2026, 11, 14), limit=2)
+    assert [c.name for c in out] == ["b1", "b2"]  # b0 is dormant; the limit cuts b3
 
 
 def test_verify_blogs_drops_empty_feeds():
