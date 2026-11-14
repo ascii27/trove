@@ -37,6 +37,10 @@ vi.mock("../api", () => ({
     refreshX: vi.fn(),
     markXPosts: vi.fn(),
     setXTheme: vi.fn(),
+    discover: vi.fn(),
+    startDiscover: vi.fn(),
+    followSuggestion: vi.fn(),
+    dismissSuggestion: vi.fn(),
   },
 }));
 
@@ -51,7 +55,24 @@ beforeEach(() => {
   mockApi.xStatus.mockResolvedValue({ configured: true, mode: "api", message: null });
   mockApi.xAccounts.mockResolvedValue({ accounts: [], unread_count: 0 });
   mockApi.xPosts.mockResolvedValue({ posts: [], unread_count: 0 });
+  mockApi.discover.mockResolvedValue(discoverState());
 });
+
+function discoverState(over: Record<string, unknown> = {}) {
+  return {
+    run: null,
+    suggestions: [],
+    profile: { topics: ["AI"], feed_count: 2, x_count: 0, collections: [] },
+    x_configured: true,
+    ...over,
+  };
+}
+
+const wineBlog = {
+  id: 11, run_id: 1, kind: "blog", name: "Wine Folly", url: "https://winefolly.com",
+  feed_url: "https://winefolly.com/feed", handle: null, description: "Wine basics, beautifully drawn.",
+  reason: "Matches your ask about wine.", topics: ["wine"], status: "new", created_at: "2026-11-14 10:00:00",
+};
 
 describe("App", () => {
   it("auto-marks an item read when opened and shows the reader", async () => {
@@ -207,4 +228,34 @@ describe("App", () => {
     expect(await screen.findByText("Agents need better evals.")).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "Today" })).toBeInTheDocument();
   });
+
+  it("runs a discovery search with context and subscribes to a suggested blog", async () => {
+    mockApi.list.mockResolvedValue({ items: [], unread_count: 0 });
+    const running = { id: 1, context: "natural wine", kinds: "all", status: "running", error: null, found: 0,
+      created_at: "", finished_at: null };
+    mockApi.startDiscover.mockResolvedValue({ run: running });
+    mockApi.followSuggestion.mockResolvedValue({ suggestion: { ...wineBlog, status: "followed" }, duplicate: false,
+      feed: feed({ id: 4, title: "Wine Folly" }) });
+
+    render(<App />);
+    await userEvent.click(await screen.findByRole("button", { name: /^Discover/ }));
+    expect(await screen.findByText(/shaped by AI · 2 feeds/)).toBeInTheDocument();
+
+    await userEvent.type(screen.getByLabelText(/anything specific/i), "natural wine");
+    await userEvent.click(screen.getByRole("button", { name: "Find suggestions" }));
+    expect(mockApi.startDiscover).toHaveBeenCalledWith("natural wine", "all");
+    expect(await screen.findByRole("status")).toHaveTextContent("for “natural wine”");
+
+    // The poll picks up the finished run.
+    mockApi.discover.mockResolvedValue(discoverState({ run: { ...running, status: "done", found: 1 },
+      suggestions: [wineBlog] }));
+    expect(await screen.findByText("Wine Folly", {}, { timeout: 6000 })).toBeInTheDocument();
+    expect(screen.getByText("Found 1 new suggestion.")).toBeInTheDocument();
+
+    mockApi.feeds.mockResolvedValue({ feeds: [feed({ id: 4, title: "Wine Folly" })] });
+    await userEvent.click(screen.getByRole("button", { name: "Subscribe" }));
+    expect(mockApi.followSuggestion).toHaveBeenCalledWith(11);
+    expect(await screen.findByText("Subscribed to Wine Folly.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Wine Folly/ })).toBeInTheDocument(); // now in the nav
+  }, 10000);
 });

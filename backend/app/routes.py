@@ -5,7 +5,7 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from . import db, feedfetch, store, xsource, xstore
+from . import db, discover, discoverstore, feedfetch, store, xsource, xstore
 from .worker import poll_x_account
 from .urls import canonicalize
 
@@ -52,6 +52,11 @@ class XReadBody(BaseModel):
 
 class XThemeBody(BaseModel):
     theme: str | None = None
+
+
+class DiscoverBody(BaseModel):
+    context: str | None = None
+    kinds: str = "all"  # 'all' | 'blogs' | 'x'
 
 
 @router.get("/health")
@@ -388,3 +393,64 @@ def set_x_post_theme(item_id: int, body: XThemeBody) -> dict:
         if not xstore.set_theme(conn, item_id, theme):
             raise HTTPException(status_code=404, detail="Post not found.")
         return {"post": xstore.get_post(conn, item_id)}
+
+
+# -------------------------------------------------------------- discover ----
+def _discover_state(conn) -> dict:
+    discoverstore.reconcile_followed(conn)
+    return {
+        "run": discoverstore.latest_run(conn),
+        "suggestions": discoverstore.list_suggestions(conn, "new"),
+        "profile": discoverstore.build_profile(conn).summary(),
+        "x_configured": xsource.get_source() is not None,
+    }
+
+
+@router.get("/discover")
+def get_discover() -> dict:
+    with db.cursor() as conn:
+        return _discover_state(conn)
+
+
+@router.post("/discover", status_code=202)
+def start_discover(body: DiscoverBody) -> dict:
+    context = " ".join((body.context or "").split())[:300] or None
+    if body.kinds not in discoverstore.KINDS:
+        raise HTTPException(status_code=422, detail="kinds must be 'all', 'blogs', or 'x'.")
+    with db.cursor() as conn:
+        if discoverstore.running_run(conn) is not None:
+            raise HTTPException(status_code=409, detail="A search is already running. It'll finish shortly.")
+        if context is None and discoverstore.build_profile(conn).empty:
+            raise HTTPException(
+                status_code=422,
+                detail="Trove doesn't know your interests yet. Tell it what you're into, or follow a few feeds first.",
+            )
+        run_id = discoverstore.create_run(conn, context, body.kinds)
+        conn.commit()
+        run = discoverstore.get_run(conn, run_id)
+    discover.launch(run_id)
+    return {"run": run}
+
+
+@router.post("/discover/suggestions/{sid}/follow")
+def follow_suggestion(sid: int) -> dict:
+    with db.cursor() as conn:
+        s = discoverstore.get_suggestion(conn, sid)
+    if s is None:
+        raise HTTPException(status_code=404, detail="Suggestion not found.")
+    result: dict = {}
+    if s["kind"] == "blog":
+        result = add_feed(FeedBody(url=s["feed_url"] or s["url"] or ""))
+    else:
+        result = follow_x_account(XAccountBody(handle=s["handle"] or ""))
+    with db.cursor() as conn:
+        discoverstore.set_status(conn, sid, "followed")
+        return {**result, "suggestion": discoverstore.get_suggestion(conn, sid)}
+
+
+@router.post("/discover/suggestions/{sid}/dismiss")
+def dismiss_suggestion(sid: int) -> dict:
+    with db.cursor() as conn:
+        if not discoverstore.set_status(conn, sid, "dismissed"):
+            raise HTTPException(status_code=404, detail="Suggestion not found.")
+        return {"suggestion": discoverstore.get_suggestion(conn, sid)}

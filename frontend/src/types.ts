@@ -134,3 +134,39 @@ export interface XStatus {
   mode: "api" | "bridge" | null;
   message: string | null;
 }
+
+/** A blog or X account Discover suggests following. */
+export interface Suggestion {
+  id: number;
+  run_id: number | null;
+  kind: "blog" | "x";
+  name: string;
+  url: string | null;
+  feed_url: string | null;
+  handle: string | null;
+  description: string | null;
+  reason: string | null;
+  topics: string[];
+  status: "new" | "followed" | "dismissed";
+  created_at: string;
+}
+
+export type DiscoverKinds = "all" | "blogs" | "x";
+
+export interface DiscoverRun {
+  id: number;
+  context: string | null;
+  kinds: DiscoverKinds;
+  status: "running" | "done" | "failed";
+  error: string | null;
+  found: number;
+  created_at: string;
+  finished_at: string | null;
+}
+
+export interface DiscoverState {
+  run: DiscoverRun | null;
+  suggestions: Suggestion[];
+  profile: { topics: string[]; feed_count: number; x_count: number; collections: string[] };
+  x_configured: boolean;
+}

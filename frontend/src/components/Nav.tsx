@@ -3,7 +3,7 @@ import type { Collection, Feed, XAccount } from "../types";
 import { AddFeed } from "./AddFeed";
 
 interface Props {
-  view: "all" | "unread" | "feed" | "collection" | "highlights" | "bookmarks" | "x";
+  view: "all" | "unread" | "feed" | "collection" | "highlights" | "bookmarks" | "x" | "discover";
   feedId: number | null;
   feeds: Feed[];
   collections: Collection[];
@@ -29,6 +29,8 @@ interface Props {
   onSelectX?: (accountId: number | null) => void;
   onFollowX?: (handle: string) => Promise<void>;
   onUnfollowX?: (id: number) => void;
+  onSelectDiscover?: () => void;
+  discoverCount?: number;
 }
 
 export function Nav({
@@ -58,6 +60,8 @@ export function Nav({
   onSelectX,
   onFollowX,
   onUnfollowX,
+  onSelectDiscover,
+  discoverCount = 0,
 }: Props) {
   const [confirmFeed, setConfirmFeed] = useState<number | null>(null);
   const [confirmX, setConfirmX] = useState<number | null>(null);
@@ -78,6 +82,20 @@ export function Nav({
         </svg>
         <span>Search</span>
       </button>
+      {onSelectDiscover && (
+        <button
+          className={`nav-item nav-search ${!lensActive && view === "discover" ? "active" : ""}`}
+          onClick={onSelectDiscover}
+          aria-current={!lensActive && view === "discover"}
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" aria-hidden="true">
+            <circle cx="12" cy="12" r="9" />
+            <path d="M15.5 8.5l-2 5-5 2 2-5z" />
+          </svg>
+          <span>Discover</span>
+          {discoverCount > 0 && <span className="count">{discoverCount}</span>}
+        </button>
+      )}
 
       <div className="lane-label">Saved</div>
       <button

@@ -1458,3 +1458,176 @@ body {
     font-size: 16px;
   }
 }
+
+/* ---- Discover: AI-found blogs and people to follow ---- */
+.disc .list-head {
+  position: static;
+  padding-left: max(18px, calc((100% - 680px) / 2));
+  padding-right: max(18px, calc((100% - 680px) / 2));
+}
+.disc-form {
+  margin-top: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.disc-label {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ink-soft);
+}
+.disc-optional {
+  font-weight: 400;
+  color: var(--ink-faint);
+  margin-left: 4px;
+}
+.disc-input {
+  font: inherit;
+  font-size: 14px;
+  padding: 9px 11px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--ink);
+  width: 100%;
+}
+.disc-input:focus {
+  outline: 2px solid var(--accent-soft);
+  border-color: var(--accent);
+}
+.disc-form-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.disc-go,
+.disc-follow {
+  font: inherit;
+  font-weight: 600;
+  border-radius: 7px;
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: #fff;
+  cursor: pointer;
+}
+.disc-go {
+  font-size: 13px;
+  padding: 7px 14px;
+}
+.disc-follow {
+  font-size: 12px;
+  padding: 5px 11px;
+}
+.disc-go:disabled,
+.disc-follow:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+.disc-progress {
+  margin: 10px 0 0;
+  font-size: 12.5px;
+  color: var(--ink-soft);
+}
+.disc-progress::before {
+  content: "";
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: 8px;
+  border-radius: 50%;
+  background: var(--unread);
+  animation: disc-pulse 1.2s ease-in-out infinite;
+}
+@keyframes disc-pulse {
+  50% {
+    opacity: 0.25;
+  }
+}
+.disc-body {
+  max-width: 680px;
+  margin: 0 auto;
+  padding: 0 18px 60px;
+}
+.disc-group {
+  margin-top: 18px;
+}
+.disc-hint {
+  font-size: 12.5px;
+  color: var(--ink-faint);
+  margin: 10px 0 0;
+}
+.disc-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.disc-card {
+  padding: 14px 0;
+  border-bottom: 1px solid var(--line-soft);
+}
+.disc-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.disc-who {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.disc-name {
+  font-family: var(--serif);
+  font-size: 16.5px;
+  font-weight: 600;
+}
+.disc-link {
+  font-size: 12.5px;
+  color: var(--accent);
+  text-decoration: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.disc-link:hover {
+  text-decoration: underline;
+}
+.disc-actions {
+  display: flex;
+  gap: 6px;
+  flex: none;
+}
+.disc-desc {
+  margin: 6px 0 0;
+  line-height: 1.5;
+}
+.disc-reason {
+  margin: 4px 0 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--ink-soft);
+  font-style: italic;
+}
+.disc-topic {
+  padding: 2px 9px;
+}
+@media (max-width: 820px) {
+  .disc-input {
+    font-size: 16px;
+  }
+  .disc-body {
+    padding: 0 14px 60px;
+  }
+  .disc-card-head {
+    flex-direction: column;
+    gap: 8px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .disc-progress::before {
+    animation: none;
+  }
+}

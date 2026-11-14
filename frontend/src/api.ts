@@ -1,11 +1,15 @@
 import type {
   Bookmark,
   Collection,
+  DiscoverKinds,
+  DiscoverRun,
+  DiscoverState,
   Feed,
   Highlight,
   HighlightArchiveEntry,
   ItemFull,
   ItemSummary,
+  Suggestion,
   XAccount,
   XPost,
   XStatus,
@@ -129,4 +133,18 @@ export const api = {
     }),
   setXTheme: (id: number, theme: string | null) =>
     req<{ post: XPost }>(`/api/x/posts/${id}/theme`, { method: "PUT", body: JSON.stringify({ theme }) }),
+
+  discover: () => req<DiscoverState>("/api/discover"),
+  startDiscover: (context: string, kinds: DiscoverKinds) =>
+    req<{ run: DiscoverRun }>("/api/discover", {
+      method: "POST",
+      body: JSON.stringify({ context: context || null, kinds }),
+    }),
+  followSuggestion: (id: number) =>
+    req<{ suggestion: Suggestion; feed?: Feed; account?: XAccount; duplicate: boolean }>(
+      `/api/discover/suggestions/${id}/follow`,
+      { method: "POST" }
+    ),
+  dismissSuggestion: (id: number) =>
+    req<{ suggestion: Suggestion }>(`/api/discover/suggestions/${id}/dismiss`, { method: "POST" }),
 };

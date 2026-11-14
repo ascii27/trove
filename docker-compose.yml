@@ -12,6 +12,8 @@ services:
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
       - TROVE_X_BEARER_TOKEN=${TROVE_X_BEARER_TOKEN:-}
       - TROVE_X_RSS_TEMPLATE=${TROVE_X_RSS_TEMPLATE:-}
+      - TROVE_DISCOVER_MODEL=${TROVE_DISCOVER_MODEL:-claude-opus-5-5}
+      - TROVE_DISCOVER_EFFORT=${TROVE_DISCOVER_EFFORT:-medium}
     restart: unless-stopped
 
 volumes:
