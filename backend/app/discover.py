@@ -335,6 +335,10 @@ def run(run_id: int, *, db_path: str | None = None, research_fn=research, resolv
             candidates += verify_blogs(picks["blogs"], followed_feeds, resolve=resolve)
         if r["kinds"] in ("all", "x"):
             candidates += verify_people(picks["people"], followed_handles)
+        log.warning(
+            "discovery run %s: model picked %d blogs / %d people; %d passed verification",
+            run_id, len(picks["blogs"]), len(picks["people"]), len(candidates),
+        )
     except DiscoverError as exc:
         _finish(db_path, run_id, error=str(exc))
         return 0
