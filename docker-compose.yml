@@ -10,6 +10,8 @@ services:
       - TROVE_STATIC_DIR=/app/static
       - TROVE_ENRICH_MODEL=${TROVE_ENRICH_MODEL:-claude-haiku-4-5}
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - TROVE_X_BEARER_TOKEN=${TROVE_X_BEARER_TOKEN:-}
+      - TROVE_X_RSS_TEMPLATE=${TROVE_X_RSS_TEMPLATE:-}
     restart: unless-stopped
 
 volumes:
