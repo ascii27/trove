@@ -31,6 +31,7 @@ interface Props {
   onUnfollowX?: (id: number) => void;
   onSelectDiscover?: () => void;
   discoverCount?: number;
+  discoverRunning?: boolean;
 }
 
 export function Nav({
@@ -62,6 +63,7 @@ export function Nav({
   onUnfollowX,
   onSelectDiscover,
   discoverCount = 0,
+  discoverRunning = false,
 }: Props) {
   const [confirmFeed, setConfirmFeed] = useState<number | null>(null);
   const [confirmX, setConfirmX] = useState<number | null>(null);
@@ -93,7 +95,14 @@ export function Nav({
             <path d="M15.5 8.5l-2 5-5 2 2-5z" />
           </svg>
           <span>Discover</span>
-          {discoverCount > 0 && <span className="count">{discoverCount}</span>}
+          {discoverRunning ? (
+            <span className="count disc-nav-running" title="A search is running">
+              <span className="disc-dot" aria-hidden="true" />
+              Finding
+            </span>
+          ) : (
+            discoverCount > 0 && <span className="count">{discoverCount}</span>
+          )}
         </button>
       )}
 

@@ -166,7 +166,7 @@ def _supports_fallbacks(model: str) -> bool:
 
 
 def research(prompt: str, *, client=None, model: str | None = None, effort: str | None = None) -> dict:
-    """Ask for candidates. Returns {blogs: [...], people: [...]} as the model gave them."""
+    """Ask for candidates. Returns {blogs, people} as the model gave them, plus token usage."""
     client = client or _default_client()
     model = model or config.discover_model()
     output_config: dict = {"format": {"type": "json_schema", "schema": _SCHEMA}}
@@ -192,7 +192,15 @@ def research(prompt: str, *, client=None, model: str | None = None, effort: str 
     if not text:
         raise DiscoverError("Claude didn't return any suggestions. Try again.")
     data = json.loads(text)
-    return {"blogs": list(data.get("blogs") or []), "people": list(data.get("people") or [])}
+    usage = getattr(resp, "usage", None)
+    return {
+        "blogs": list(data.get("blogs") or []),
+        "people": list(data.get("people") or []),
+        "usage": {
+            "input": getattr(usage, "input_tokens", None),
+            "output": getattr(usage, "output_tokens", None),
+        },
+    }
 
 
 # ----------------------------------------------------------- verification ----
@@ -318,14 +326,13 @@ def run(run_id: int, *, db_path: str | None = None, research_fn=research, resolv
         prompt = build_prompt(profile, r["context"], r["kinds"], exclude)
         picks = research_fn(prompt)
         candidates: list[Candidate] = []
+        proposed = 0
         if r["kinds"] in ("all", "blogs"):
+            proposed += len(picks["blogs"])
             candidates += verify_blogs(picks["blogs"], followed_feeds, resolve=resolve)
         if r["kinds"] in ("all", "x"):
+            proposed += len(picks["people"])
             candidates += verify_people(picks["people"], followed_handles)
-        log.warning(
-            "discovery run %s: model picked %d blogs / %d people; %d passed verification",
-            run_id, len(picks["blogs"]), len(picks["people"]), len(candidates),
-        )
     except DiscoverError as exc:
         _finish(db_path, run_id, error=str(exc))
         return 0
@@ -334,6 +341,7 @@ def run(run_id: int, *, db_path: str | None = None, research_fn=research, resolv
         _finish(db_path, run_id, error=_friendly(exc))
         return 0
 
+    usage = picks.get("usage") or {}
     found = 0
     with db.cursor(db_path) as conn:
         for c in candidates:
@@ -350,7 +358,19 @@ def run(run_id: int, *, db_path: str | None = None, research_fn=research, resolv
                 reason=c.reason,
                 topics=c.topics,
             )
-        discoverstore.finish_run(conn, run_id, found=found)
+        discoverstore.finish_run(
+            conn,
+            run_id,
+            found=found,
+            proposed=proposed,
+            passed=len(candidates),
+            input_tokens=usage.get("input"),
+            output_tokens=usage.get("output"),
+        )
+    log.warning(
+        "discovery run %s: %d proposed, %d passed checks, %d new; tokens in/out %s/%s",
+        run_id, proposed, len(candidates), found, usage.get("input"), usage.get("output"),
+    )
     return found
 
 

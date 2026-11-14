@@ -400,6 +400,7 @@ def _discover_state(conn) -> dict:
     discoverstore.reconcile_followed(conn)
     return {
         "run": discoverstore.latest_run(conn),
+        "runs": discoverstore.list_runs(conn),
         "suggestions": discoverstore.list_suggestions(conn, "new"),
         "profile": discoverstore.build_profile(conn).summary(),
         "x_configured": xsource.get_source() is not None,

@@ -93,16 +93,18 @@ def test_prompt_focuses_on_context_and_lists_exclusions():
 # --------------------------------------------------------------- call ----
 def _json_resp(data, stop="end_turn"):
     import json as _json
-    return SimpleNamespace(stop_reason=stop, content=[_block("thinking", thinking=""), _block("text", text=_json.dumps(data))])
+    return SimpleNamespace(stop_reason=stop, usage=SimpleNamespace(input_tokens=2200, output_tokens=4300),
+                           content=[_block("thinking", thinking=""), _block("text", text=_json.dumps(data))])
 
 
 def test_research_asks_for_structured_json():
     client = FakeClient([_json_resp(PICKS)])
-    assert discover.research("prompt", client=client, model="claude-opus-5-5") == PICKS
+    assert discover.research("prompt", client=client, model="claude-opus-5-5") == {
+        **PICKS, "usage": {"input": 2200, "output": 4300}}
     call = client.calls[0]
     assert "tools" not in call
     assert call["output_config"]["format"]["type"] == "json_schema"
-    assert call["output_config"]["effort"] == "medium"
+    assert call["output_config"]["effort"] == "low"
     assert call["fallbacks"] == "default"
 
 
@@ -111,6 +113,15 @@ def test_research_refusal_and_truncation_are_errors():
         discover.research("p", client=FakeClient([_json_resp({}, stop="refusal")]), model="claude-opus-5-5")
     with pytest.raises(discover.DiscoverError, match="cut off"):
         discover.research("p", client=FakeClient([_json_resp({}, stop="max_tokens")]), model="claude-opus-5-5")
+
+
+def test_default_is_haiku_at_low_effort_without_fallbacks():
+    client = FakeClient([_json_resp(PICKS)])
+    discover.research("p", client=client)
+    call = client.calls[0]
+    assert call["model"] == "claude-haiku-5-5"
+    assert call["output_config"]["effort"] == "low"
+    assert "fallbacks" not in call  # Haiku has no server-side fallback
 
 
 def test_research_on_older_models_skips_effort_and_fallbacks():
@@ -188,6 +199,17 @@ def test_run_stores_verified_suggestions_once(db_path):
     assert "- @jancisrobinson" in prompts[0] and "- Wine Folly" in prompts[0]
 
 
+def test_run_records_what_happened_for_the_history(db_path):
+    with db.cursor(db_path) as conn:
+        rid = discoverstore.create_run(conn, "wine", "all")
+    picks = {**PICKS, "usage": {"input": 2200, "output": 4300}}
+    discover.run(rid, db_path=db_path, research_fn=lambda p: picks, resolve=_resolve)
+    with db.cursor(db_path) as conn:
+        (run,) = discoverstore.list_runs(conn)
+    assert (run["proposed"], run["passed"], run["found"]) == (4, 2, 2)
+    assert (run["input_tokens"], run["output_tokens"]) == (2200, 4300)
+
+
 def test_run_records_failure(db_path):
     with db.cursor(db_path) as conn:
         rid = discoverstore.create_run(conn, "wine", "all")
@@ -227,6 +249,7 @@ def test_discover_flow_follow_and_dismiss(client, sync_discover, monkeypatch):
 
     state = client.get("/api/discover").json()
     assert state["run"]["status"] == "done"
+    assert [r["id"] for r in state["runs"]] == [state["run"]["id"]]
     blog, person = state["suggestions"]
     assert blog["topics"] == ["wine"] and person["handle"] == "jancisrobinson"
     assert state["x_configured"] is False

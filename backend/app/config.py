@@ -65,12 +65,13 @@ def x_max_results() -> int:
 
 
 # ---- Discovery ----
-# Suggests blogs and X accounts with one Claude call. Runs only when
-# you ask (it isn't on a schedule), so a more capable model than enrichment's is fine.
+# Suggests blogs and X accounts with one Claude call. Haiku at low effort: in a
+# live comparison it picked as well as Sonnet/Opus for ~0.25¢ a search (Opus: ~9¢),
+# and Trove verifies every pick anyway.
 def discover_model() -> str:
-    return os.environ.get("TROVE_DISCOVER_MODEL", "claude-opus-5-5")
+    return os.environ.get("TROVE_DISCOVER_MODEL", "claude-haiku-5-5")
 
 
 def discover_effort() -> str:
-    return os.environ.get("TROVE_DISCOVER_EFFORT", "medium")
+    return os.environ.get("TROVE_DISCOVER_EFFORT", "low")
 

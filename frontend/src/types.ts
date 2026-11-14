@@ -159,13 +159,18 @@ export interface DiscoverRun {
   kinds: DiscoverKinds;
   status: "running" | "done" | "failed";
   error: string | null;
-  found: number;
-  created_at: string;
+  found: number; // new suggestions this run added
+  proposed: number | null; // what Claude suggested (null on runs before this was tracked)
+  passed: number | null; // what survived the feed/handle checks
+  input_tokens: number | null;
+  output_tokens: number | null;
+  created_at: string; // UTC, "YYYY-MM-DD HH:MM:SS"
   finished_at: string | null;
 }
 
 export interface DiscoverState {
   run: DiscoverRun | null;
+  runs: DiscoverRun[]; // newest first
   suggestions: Suggestion[];
   profile: { topics: string[]; feed_count: number; x_count: number; collections: string[] };
   x_configured: boolean;

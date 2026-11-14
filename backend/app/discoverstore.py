@@ -10,7 +10,10 @@ import json
 import sqlite3
 from dataclasses import dataclass, field
 
-_RUN_COLS = "id, context, kinds, status, error, found, created_at, finished_at"
+_RUN_COLS = (
+    "id, context, kinds, status, error, found, proposed, passed, input_tokens, output_tokens, "
+    "created_at, finished_at"
+)
 _SUGGESTION_COLS = (
     "id, run_id, kind, name, url, feed_url, handle, description, reason, topics, status, created_at"
 )
@@ -133,11 +136,27 @@ def running_run(conn: sqlite3.Connection) -> dict | None:
     return dict(row) if row else None
 
 
-def finish_run(conn: sqlite3.Connection, run_id: int, *, found: int = 0, error: str | None = None) -> None:
+def finish_run(
+    conn: sqlite3.Connection,
+    run_id: int,
+    *,
+    found: int = 0,
+    error: str | None = None,
+    proposed: int | None = None,
+    passed: int | None = None,
+    input_tokens: int | None = None,
+    output_tokens: int | None = None,
+) -> None:
+    """found: new suggestions added; proposed: what the model gave; passed: what survived checks."""
     conn.execute(
-        "UPDATE discovery_runs SET status = ?, error = ?, found = ?, finished_at = datetime('now') WHERE id = ?",
-        ("failed" if error else "done", error, found, run_id),
+        "UPDATE discovery_runs SET status = ?, error = ?, found = ?, proposed = ?, passed = ?, "
+        "input_tokens = ?, output_tokens = ?, finished_at = datetime('now') WHERE id = ?",
+        ("failed" if error else "done", error, found, proposed, passed, input_tokens, output_tokens, run_id),
     )
+
+
+def list_runs(conn: sqlite3.Connection, limit: int = 10) -> list[dict]:
+    return [dict(r) for r in conn.execute(f"SELECT {_RUN_COLS} FROM discovery_runs ORDER BY id DESC LIMIT ?", (limit,))]
 
 
 def fail_interrupted_runs(conn: sqlite3.Connection) -> int:

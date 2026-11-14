@@ -159,6 +159,11 @@ MIGRATIONS = [
     ("items", "post_id", "ALTER TABLE items ADD COLUMN post_id TEXT"),
     ("items", "thread_len", "ALTER TABLE items ADD COLUMN thread_len INTEGER"),
     ("items", "theme", "ALTER TABLE items ADD COLUMN theme TEXT"),
+    # Discover: what each run did, so the history can say why it found nothing.
+    ("discovery_runs", "proposed", "ALTER TABLE discovery_runs ADD COLUMN proposed INTEGER"),
+    ("discovery_runs", "passed", "ALTER TABLE discovery_runs ADD COLUMN passed INTEGER"),
+    ("discovery_runs", "input_tokens", "ALTER TABLE discovery_runs ADD COLUMN input_tokens INTEGER"),
+    ("discovery_runs", "output_tokens", "ALTER TABLE discovery_runs ADD COLUMN output_tokens INTEGER"),
 ]
 
 

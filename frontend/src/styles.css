@@ -1547,7 +1547,8 @@ body {
   font-size: 12.5px;
   color: var(--ink-soft);
 }
-.disc-progress::before {
+.disc-progress::before,
+.disc-dot {
   content: "";
   display: inline-block;
   width: 8px;
@@ -1557,12 +1558,76 @@ body {
   background: var(--unread);
   animation: disc-pulse 1.2s ease-in-out infinite;
 }
+.disc-nav-running {
+  display: inline-flex;
+  align-items: center;
+}
+.disc-nav-running .disc-dot {
+  width: 6px;
+  height: 6px;
+  margin-right: 5px;
+}
+.disc-filter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 16px;
+  font-size: 12.5px;
+  color: var(--ink-soft);
+}
+.disc-filter .ghost-sm {
+  flex: none;
+  white-space: nowrap;
+}
+.disc-runs {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.disc-run {
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line-soft);
+}
+.disc-run-main {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+.disc-run-label {
+  font-weight: 600;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.disc-run-time {
+  flex: none;
+  font-size: 12px;
+  color: var(--ink-faint);
+}
+.disc-run-outcome {
+  margin-top: 3px;
+  font-size: 12.5px;
+  color: var(--ink-soft);
+}
+.disc-run--failed .disc-run-outcome {
+  color: #a23b2f;
+}
+.disc-run-show {
+  font: inherit;
+  margin-left: 8px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--accent);
+  cursor: pointer;
+}
 @keyframes disc-pulse {
   50% {
     opacity: 0.25;
   }
 }
 .disc-body {
+  scroll-margin-top: 8px;
   max-width: 680px;
   margin: 0 auto;
   padding: 0 18px 60px;
@@ -1644,7 +1709,8 @@ body {
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .disc-progress::before {
+  .disc-progress::before,
+  .disc-dot {
     animation: none;
   }
 }

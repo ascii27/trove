@@ -1,5 +1,5 @@
-import { useState } from "react";
-import type { DiscoverKinds, DiscoverState, Suggestion } from "../types";
+import { useEffect, useRef, useState } from "react";
+import type { DiscoverKinds, DiscoverRun, DiscoverState, Suggestion } from "../types";
 
 interface Props {
   state: DiscoverState | null;
@@ -23,6 +23,37 @@ function host(url: string | null): string | null {
   } catch {
     return null;
   }
+}
+
+function ago(utc: string, now: number): string {
+  const t = Date.parse(utc.replace(" ", "T") + "Z");
+  if (Number.isNaN(t)) return "";
+  const min = Math.round((now - t) / 60000);
+  if (min < 1) return "just now";
+  if (min < 60) return `${min} min ago`;
+  const h = Math.round(min / 60);
+  if (h < 24) return `${h} h ago`;
+  return new Date(t).toLocaleDateString();
+}
+
+function plural(n: number, word: string): string {
+  return `${n} ${word}${n === 1 ? "" : "s"}`;
+}
+
+/** What a finished search did, in words — including why it found nothing. */
+export function runOutcome(run: DiscoverRun): string {
+  if (run.status === "running") return "Finding…";
+  if (run.status === "failed") return run.error ?? "Failed. Try again.";
+  if (run.found > 0) return plural(run.found, "new suggestion");
+  if (run.proposed == null) return "Nothing new";
+  if (run.proposed === 0) return "Claude didn't suggest anything. Try different wording.";
+  if (!run.passed) return `None of the ${run.proposed} suggested had a working, recent feed or a valid handle.`;
+  return `Nothing new: all ${run.passed} were already suggested or followed.`;
+}
+
+function runLabel(run: DiscoverRun): string {
+  const what = run.context ? `“${run.context}”` : "From your interests";
+  return run.kinds === "blogs" ? `${what} · Blogs` : run.kinds === "x" ? `${what} · People on X` : what;
 }
 
 function SuggestionCard({
@@ -98,10 +129,20 @@ export function Discover({ state, notice, onStart, onFollow, onDismiss, onBackTo
   const [kinds, setKinds] = useState<DiscoverKinds>("all");
   const [startErr, setStartErr] = useState<string | null>(null);
   const [starting, setStarting] = useState(false);
+  const [onlyRun, setOnlyRun] = useState<number | null>(null);
+  const bodyRef = useRef<HTMLDivElement>(null);
+  // "Show N to review" sits at the bottom of the history; bring the filtered results into view.
+  useEffect(() => {
+    if (onlyRun != null) bodyRef.current?.scrollIntoView?.({ block: "start" });
+  }, [onlyRun]);
 
   const run = state?.run ?? null;
+  const runs = state?.runs ?? [];
   const running = starting || run?.status === "running";
-  const suggestions = state?.suggestions ?? [];
+  const allSuggestions = state?.suggestions ?? [];
+  const shownRun = onlyRun != null ? runs.find((r) => r.id === onlyRun) ?? null : null;
+  const suggestions = shownRun ? allSuggestions.filter((s) => s.run_id === shownRun.id) : allSuggestions;
+  const now = Date.now();
   const blogs = suggestions.filter((s) => s.kind === "blog");
   const people = suggestions.filter((s) => s.kind === "x");
   const profile = state?.profile;
@@ -111,6 +152,7 @@ export function Discover({ state, notice, onStart, onFollow, onDismiss, onBackTo
     e.preventDefault();
     setStartErr(null);
     setStarting(true);
+    setOnlyRun(null);
     try {
       await onStart(context.trim(), kinds);
     } catch (e2) {
@@ -187,14 +229,24 @@ export function Discover({ state, notice, onStart, onFollow, onDismiss, onBackTo
         {notice && <div className="notice">{notice}</div>}
       </div>
 
-      <div className="disc-body">
+      <div className="disc-body" ref={bodyRef}>
+        {shownRun && (
+          <div className="disc-filter">
+            <span>
+              Showing {runLabel(shownRun)} · {suggestions.length} to review
+            </span>
+            <button className="ghost-sm" onClick={() => setOnlyRun(null)}>
+              Show all
+            </button>
+          </div>
+        )}
         {state == null ? null : suggestions.length === 0 ? (
           !running && (
             <div className="empty-state">
-              <p className="empty-title">No suggestions yet</p>
+              <p className="empty-title">{shownRun ? "All reviewed" : "No suggestions waiting"}</p>
               <p className="empty-sub">
-                {run?.status === "done"
-                  ? "Nothing new this time. Try adding something specific above."
+                {runs.length > 0
+                  ? "Your recent searches are below. Try adding something specific above."
                   : "Find suggestions to see blogs and people picked for you."}
               </p>
             </div>
@@ -229,6 +281,36 @@ export function Discover({ state, notice, onStart, onFollow, onDismiss, onBackTo
               </div>
             )}
           </>
+        )}
+
+        {runs.length > 0 && (
+          <div className="disc-group">
+            <h3 className="x-group-head">Recent searches</h3>
+            <ul className="disc-runs">
+              {runs.map((r) => {
+                const left = allSuggestions.filter((s) => s.run_id === r.id).length;
+                const outcome = runOutcome(r);
+                return (
+                  <li key={r.id} className={`disc-run disc-run--${r.status}`}>
+                    <div className="disc-run-main">
+                      <span className="disc-run-label">{runLabel(r)}</span>
+                      <span className="disc-run-time">{ago(r.created_at, now)}</span>
+                    </div>
+                    <div className="disc-run-outcome">
+                      {r.status === "running" && <span className="disc-dot" aria-hidden="true" />}
+                      {outcome}
+                      {r.found > 0 && left > 0 && (
+                        <button className="disc-run-show" onClick={() => setOnlyRun(r.id)}>
+                          Show {left} to review
+                        </button>
+                      )}
+                      {r.found > 0 && left === 0 && " · all reviewed"}
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
         )}
       </div>
     </section>

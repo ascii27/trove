@@ -561,7 +561,7 @@ export default function App() {
     setDiscoverNotice(null);
     const { run } = await api.startDiscover(context, kinds);
     discoverRunRef.current = run;
-    setDiscover((prev) => (prev ? { ...prev, run } : prev));
+    setDiscover((prev) => (prev ? { ...prev, run, runs: [run, ...prev.runs] } : prev));
   }, []);
 
   const dropSuggestion = useCallback((id: number) => {
@@ -734,6 +734,7 @@ export default function App() {
         onUnfollowX={onUnfollowX}
         onSelectDiscover={onSelectDiscover}
         discoverCount={discover?.suggestions.length ?? 0}
+        discoverRunning={discoverRunning}
       />
       {view === "discover" && !lensActive ? (
         <Discover

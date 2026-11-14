@@ -61,6 +61,7 @@ beforeEach(() => {
 function discoverState(over: Record<string, unknown> = {}) {
   return {
     run: null,
+    runs: [],
     suggestions: [],
     profile: { topics: ["AI"], feed_count: 2, x_count: 0, collections: [] },
     x_configured: true,
@@ -247,8 +248,8 @@ describe("App", () => {
     expect(await screen.findByRole("status")).toHaveTextContent("for “natural wine”");
 
     // The poll picks up the finished run.
-    mockApi.discover.mockResolvedValue(discoverState({ run: { ...running, status: "done", found: 1 },
-      suggestions: [wineBlog] }));
+    const done = { ...running, status: "done", found: 1, proposed: 22, passed: 1 };
+    mockApi.discover.mockResolvedValue(discoverState({ run: done, runs: [done], suggestions: [wineBlog] }));
     expect(await screen.findByText("Wine Folly", {}, { timeout: 6000 })).toBeInTheDocument();
     expect(screen.getByText("Found 1 new suggestion.")).toBeInTheDocument();
 
