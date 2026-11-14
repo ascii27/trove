@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import App from "../App";
 import { api } from "../api";
-import { bookmark, feed, full, summary } from "./factory";
+import { bookmark, feed, full, summary, xAccount, xPost } from "./factory";
 
 vi.mock("../api", () => ({
   api: {
@@ -29,6 +29,14 @@ vi.mock("../api", () => ({
     bookmarks: vi.fn(),
     addTag: vi.fn(),
     removeTag: vi.fn(),
+    xStatus: vi.fn(),
+    xAccounts: vi.fn(),
+    xPosts: vi.fn(),
+    followX: vi.fn(),
+    unfollowX: vi.fn(),
+    refreshX: vi.fn(),
+    markXPosts: vi.fn(),
+    setXTheme: vi.fn(),
   },
 }));
 
@@ -40,6 +48,9 @@ beforeEach(() => {
   mockApi.collections.mockResolvedValue({ collections: [] });
   mockApi.highlights.mockResolvedValue({ highlights: [] });
   mockApi.bookmarks.mockResolvedValue({ bookmarks: [] });
+  mockApi.xStatus.mockResolvedValue({ configured: true, mode: "api", message: null });
+  mockApi.xAccounts.mockResolvedValue({ accounts: [], unread_count: 0 });
+  mockApi.xPosts.mockResolvedValue({ posts: [], unread_count: 0 });
 });
 
 describe("App", () => {
@@ -176,5 +187,24 @@ describe("App", () => {
     await waitFor(() => expect(mockApi.list).toHaveBeenCalledWith("feed", 2));
     // the feed appears in the nav (as a selectable button)
     expect(await screen.findByRole("button", { name: /^Pragmatic Engineer/ })).toBeInTheDocument();
+  });
+
+  it("follows an X account and shows its posts as a grouped stream", async () => {
+    const acct = xAccount({ id: 3 });
+    mockApi.list.mockResolvedValue({ items: [], unread_count: 0 });
+    mockApi.followX.mockResolvedValue({ account: acct, duplicate: false });
+    mockApi.xAccounts.mockResolvedValueOnce({ accounts: [], unread_count: 0 }).mockResolvedValue({ accounts: [acct], unread_count: 1 });
+    const now = new Date().toISOString().slice(0, 19);
+    mockApi.xPosts.mockResolvedValue({ posts: [xPost({ id: 11, published_at: now })], unread_count: 1 });
+
+    render(<App />);
+    await userEvent.click(await screen.findByRole("button", { name: "Follow someone on X" }));
+    await userEvent.type(screen.getByLabelText("@handle or profile link"), "@jane");
+    await userEvent.click(screen.getByRole("button", { name: "Follow" }));
+
+    await waitFor(() => expect(mockApi.followX).toHaveBeenCalledWith("@jane"));
+    await waitFor(() => expect(mockApi.xPosts).toHaveBeenCalledWith(3));
+    expect(await screen.findByText("Agents need better evals.")).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Today" })).toBeInTheDocument();
   });
 });

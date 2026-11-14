@@ -1,6 +1,25 @@
 import { useState } from "react";
 
-export function AddFeed({ onAddFeed }: { onAddFeed: (url: string) => Promise<void> }) {
+interface Props {
+  onAddFeed: (url: string) => Promise<void>;
+  /** Labels — defaults are for RSS feeds; the X section reuses this for handles. */
+  openLabel?: string;
+  openAria?: string;
+  placeholder?: string;
+  submitLabel?: string;
+  busyLabel?: string;
+  inputType?: "url" | "text";
+}
+
+export function AddFeed({
+  onAddFeed,
+  openLabel = "+ Feed",
+  openAria = "Add a feed",
+  placeholder = "Feed or site URL",
+  submitLabel = "Add feed",
+  busyLabel = "Adding…",
+  inputType = "url",
+}: Props) {
   const [open, setOpen] = useState(false);
   const [url, setUrl] = useState("");
   const [busy, setBusy] = useState(false);
@@ -24,8 +43,8 @@ export function AddFeed({ onAddFeed }: { onAddFeed: (url: string) => Promise<voi
 
   if (!open) {
     return (
-      <button className="add-sm" onClick={() => setOpen(true)} aria-label="Add a feed">
-        + Feed
+      <button className="add-sm" onClick={() => setOpen(true)} aria-label={openAria}>
+        {openLabel}
       </button>
     );
   }
@@ -34,16 +53,18 @@ export function AddFeed({ onAddFeed }: { onAddFeed: (url: string) => Promise<voi
     <form className="capture feed-capture" onSubmit={submit}>
       <input
         autoFocus
-        type="url"
-        inputMode="url"
-        placeholder="Feed or site URL"
+        type={inputType}
+        inputMode={inputType === "url" ? "url" : "text"}
+        autoCapitalize="off"
+        autoCorrect="off"
+        placeholder={placeholder}
         value={url}
         onChange={(e) => setUrl(e.target.value)}
-        aria-label="Feed or site URL"
+        aria-label={placeholder}
       />
       <div className="capture-row">
         <button type="submit" disabled={busy}>
-          {busy ? "Adding…" : "Add feed"}
+          {busy ? busyLabel : submitLabel}
         </button>
         <button type="button" className="ghost" onClick={() => setOpen(false)}>
           Cancel

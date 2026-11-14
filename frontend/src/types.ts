@@ -97,3 +97,40 @@ export function isPending(i: ItemSummary): boolean {
   const enriching = ex !== "failed" && (en === "pending" || en === "enriching");
   return extracting || enriching;
 }
+
+/** An X (Twitter) account you follow. */
+export interface XAccount {
+  id: number;
+  handle: string;
+  name: string | null;
+  avatar_url: string | null;
+  last_polled_at: string | null;
+  last_error: string | null;
+  unread_count: number;
+}
+
+/** One X post — or an author's self-thread stitched into a single post. */
+export interface XPost {
+  id: number;
+  x_account_id: number | null;
+  post_id: string;
+  thread_len: number | null;
+  theme: string | null;
+  title: string | null;
+  author: string | null;
+  handle: string | null;
+  avatar_url: string | null;
+  original_url: string;
+  published_at: string | null;
+  date_saved: string;
+  read_state: ReadState;
+  content_text: string | null;
+  topics: string[];
+  highlights: Highlight[];
+}
+
+export interface XStatus {
+  configured: boolean;
+  mode: "api" | "bridge" | null;
+  message: string | null;
+}

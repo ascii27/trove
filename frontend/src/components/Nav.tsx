@@ -1,9 +1,9 @@
 import { useState, type ReactNode } from "react";
-import type { Collection, Feed } from "../types";
+import type { Collection, Feed, XAccount } from "../types";
 import { AddFeed } from "./AddFeed";
 
 interface Props {
-  view: "all" | "unread" | "feed" | "collection" | "highlights" | "bookmarks";
+  view: "all" | "unread" | "feed" | "collection" | "highlights" | "bookmarks" | "x";
   feedId: number | null;
   feeds: Feed[];
   collections: Collection[];
@@ -23,6 +23,12 @@ interface Props {
   onAddFeed: (url: string) => Promise<void>;
   onDeleteFeed: (id: number) => void;
   captureSlot: ReactNode;
+  xAccounts?: XAccount[];
+  xAccountId?: number | null;
+  xUnreadCount?: number;
+  onSelectX?: (accountId: number | null) => void;
+  onFollowX?: (handle: string) => Promise<void>;
+  onUnfollowX?: (id: number) => void;
 }
 
 export function Nav({
@@ -46,8 +52,15 @@ export function Nav({
   onAddFeed,
   onDeleteFeed,
   captureSlot,
+  xAccounts = [],
+  xAccountId = null,
+  xUnreadCount = 0,
+  onSelectX,
+  onFollowX,
+  onUnfollowX,
 }: Props) {
   const [confirmFeed, setConfirmFeed] = useState<number | null>(null);
+  const [confirmX, setConfirmX] = useState<number | null>(null);
   const [confirmCol, setConfirmCol] = useState<number | null>(null);
   const isActive = (v: "all" | "unread") => !lensActive && view === v;
 
@@ -182,6 +195,70 @@ export function Nav({
           )}
         </div>
       ))}
+      {onSelectX && onFollowX && (
+        <>
+          <div className="lane-label feeds-label">
+            <span>X</span>
+            <AddFeed
+              onAddFeed={onFollowX}
+              openLabel="+ Follow"
+              openAria="Follow someone on X"
+              placeholder="@handle or profile link"
+              submitLabel="Follow"
+              busyLabel="Following…"
+              inputType="text"
+            />
+          </div>
+          <button
+            className={`nav-item ${!lensActive && view === "x" && xAccountId == null ? "active" : ""}`}
+            onClick={() => onSelectX(null)}
+            aria-current={!lensActive && view === "x" && xAccountId == null}
+          >
+            <span>All posts</span>
+            {xUnreadCount > 0 && <span className="count unread">{xUnreadCount}</span>}
+          </button>
+          {xAccounts.map((a) => {
+            const active = !lensActive && view === "x" && xAccountId === a.id;
+            const label = a.name ?? `@${a.handle}`;
+            return (
+              <div key={a.id} className={`nav-feed nav-sub ${active ? "active" : ""}`}>
+                <button className="nav-item nav-feed-open" onClick={() => onSelectX(a.id)} aria-current={active}
+                  title={`@${a.handle}`}>
+                  {a.avatar_url ? (
+                    <img className="nav-avatar" src={a.avatar_url} alt="" />
+                  ) : (
+                    <span className="dot x" aria-hidden="true" />
+                  )}
+                  <span className="nav-feed-title">{label}</span>
+                  {a.last_error && <span className="nav-warn" title={a.last_error}>!</span>}
+                  {a.unread_count > 0 && <span className="count unread">{a.unread_count}</span>}
+                </button>
+                {confirmX === a.id ? (
+                  <span className="feed-confirm">
+                    <button
+                      className="danger"
+                      onClick={() => {
+                        onUnfollowX?.(a.id);
+                        setConfirmX(null);
+                      }}
+                    >
+                      Unfollow
+                    </button>
+                    <button className="ghost-sm" onClick={() => setConfirmX(null)}>
+                      Cancel
+                    </button>
+                  </span>
+                ) : (
+                  <button className="nav-feed-remove" aria-label={`Unfollow @${a.handle}`} title="Unfollow"
+                    onClick={() => setConfirmX(a.id)}>
+                    ×
+                  </button>
+                )}
+              </div>
+            );
+          })}
+        </>
+      )}
     </aside>
   );
 }

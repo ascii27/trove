@@ -5,7 +5,8 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from . import db, feedfetch, store
+from . import db, feedfetch, store, xsource, xstore
+from .worker import poll_x_account
 from .urls import canonicalize
 
 router = APIRouter(prefix="/api")
@@ -38,6 +39,19 @@ class HighlightBody(BaseModel):
 
 class TagBody(BaseModel):
     name: str
+
+
+class XAccountBody(BaseModel):
+    handle: str
+
+
+class XReadBody(BaseModel):
+    ids: list[int]
+    state: str = "read"  # 'read' | 'unread'
+
+
+class XThemeBody(BaseModel):
+    theme: str | None = None
 
 
 @router.get("/health")
@@ -282,3 +296,95 @@ def remove_tag(item_id: int, name: str) -> dict:
         if topics is None:
             raise HTTPException(status_code=404, detail="Item not found.")
         return {"topics": topics}
+
+
+# -------------------------------------------------------------------- X ----
+@router.get("/x/status")
+def x_status() -> dict:
+    source = xsource.get_source()
+    return {
+        "configured": source is not None,
+        "mode": source.mode if source else None,
+        "message": None if source else xsource.NOT_CONFIGURED,
+    }
+
+
+@router.get("/x/accounts")
+def list_x_accounts() -> dict:
+    with db.cursor() as conn:
+        return {"accounts": xstore.list_accounts(conn), "unread_count": xstore.unread_total(conn)}
+
+
+@router.post("/x/accounts", status_code=201)
+def follow_x_account(body: XAccountBody) -> dict:
+    try:
+        handle = xsource.normalize_handle(body.handle)
+    except xsource.XError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    with db.cursor() as conn:
+        existing = xstore.get_account_by_handle(conn, handle)
+        if existing is not None:
+            return {"account": xstore.account_dict(conn, existing["id"]), "duplicate": True}
+    source = xsource.get_source()
+    if source is None:
+        raise HTTPException(status_code=422, detail=xsource.NOT_CONFIGURED)
+    try:
+        profile = source.lookup(handle)
+    except xsource.XError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    except Exception:  # noqa: BLE001 - network failure
+        raise HTTPException(status_code=502, detail="Couldn't reach X. Try again in a moment.")
+    with db.cursor() as conn:
+        account_id = xstore.add_account(conn, profile)
+        conn.commit()
+        # First pull now so the stream isn't empty; failures are recorded on the account.
+        poll_x_account(conn, xstore.get_account(conn, account_id), source)
+        return {"account": xstore.account_dict(conn, account_id), "duplicate": False}
+
+
+@router.delete("/x/accounts/{account_id}")
+def unfollow_x_account(account_id: int) -> dict:
+    with db.cursor() as conn:
+        if not xstore.delete_account(conn, account_id):
+            raise HTTPException(status_code=404, detail="Account not found.")
+        return {"deleted": True}
+
+
+@router.post("/x/accounts/{account_id}/refresh")
+def refresh_x_account(account_id: int) -> dict:
+    source = xsource.get_source()
+    if source is None:
+        raise HTTPException(status_code=422, detail=xsource.NOT_CONFIGURED)
+    with db.cursor() as conn:
+        account = xstore.get_account(conn, account_id)
+        if account is None:
+            raise HTTPException(status_code=404, detail="Account not found.")
+        counts = poll_x_account(conn, account, source)
+        return {"account": xstore.account_dict(conn, account_id), **counts}
+
+
+@router.get("/x/posts")
+def list_x_posts(account_id: int | None = None, unread: bool = False) -> dict:
+    with db.cursor() as conn:
+        return {
+            "posts": xstore.list_posts(conn, account_id, unread_only=unread),
+            "unread_count": xstore.unread_total(conn),
+        }
+
+
+@router.post("/x/posts/read")
+def mark_x_posts(body: XReadBody) -> dict:
+    if body.state not in ("read", "unread"):
+        raise HTTPException(status_code=422, detail="state must be 'read' or 'unread'.")
+    with db.cursor() as conn:
+        n = xstore.mark_posts(conn, body.ids, body.state)
+        return {"updated": n, "unread_count": xstore.unread_total(conn)}
+
+
+@router.put("/x/posts/{item_id}/theme")
+def set_x_post_theme(item_id: int, body: XThemeBody) -> dict:
+    theme = " ".join((body.theme or "").split())[:40] or None
+    with db.cursor() as conn:
+        if not xstore.set_theme(conn, item_id, theme):
+            raise HTTPException(status_code=404, detail="Post not found.")
+        return {"post": xstore.get_post(conn, item_id)}

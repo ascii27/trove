@@ -17,7 +17,7 @@ SCHEMA = """
 CREATE TABLE IF NOT EXISTS items (
     id                INTEGER PRIMARY KEY AUTOINCREMENT,
     url_canonical     TEXT NOT NULL UNIQUE,
-    lane              TEXT NOT NULL DEFAULT 'saved',      -- 'saved' | 'feed' (P1: always 'saved')
+    lane              TEXT NOT NULL DEFAULT 'saved',      -- 'saved' | 'feed' | 'bookmark' | 'x'
     title             TEXT,
     author            TEXT,
     source            TEXT,
@@ -30,7 +30,7 @@ CREATE TABLE IF NOT EXISTS items (
     date_saved        TEXT NOT NULL DEFAULT (datetime('now')),
     read_state        TEXT NOT NULL DEFAULT 'unread',     -- unread|reading|read|archived
     extraction_status TEXT NOT NULL DEFAULT 'pending',    -- pending|extracting|extracted|partial|failed
-    enrichment_status TEXT NOT NULL DEFAULT 'pending',    -- pending|enriching|done|failed|deferred
+    enrichment_status TEXT NOT NULL DEFAULT 'pending',    -- pending|enriching|done|failed|deferred|skipped
     summary           TEXT,
     category          TEXT,
     source_type       TEXT,                               -- primary|secondary|analysis
@@ -92,6 +92,19 @@ CREATE TABLE IF NOT EXISTS item_collections (
     PRIMARY KEY (collection_id, item_id)
 );
 
+CREATE TABLE IF NOT EXISTS x_accounts (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    handle         TEXT NOT NULL,                          -- without the leading @
+    user_id        TEXT,                                   -- X user id (API mode)
+    name           TEXT,
+    avatar_url     TEXT,
+    last_seen_id   TEXT,                                   -- newest post id ingested (since_id)
+    last_polled_at TEXT,
+    last_error     TEXT,
+    created_at     TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_x_accounts_handle ON x_accounts (handle COLLATE NOCASE);
+
 CREATE TABLE IF NOT EXISTS highlights (
     id           INTEGER PRIMARY KEY AUTOINCREMENT,
     item_id      INTEGER NOT NULL REFERENCES items(id) ON DELETE CASCADE,
@@ -110,6 +123,12 @@ MIGRATIONS = [
     ("items", "published_at", "ALTER TABLE items ADD COLUMN published_at TEXT"),
     # Bookmarks lane: the site's favicon URL, shown on bookmark cards.
     ("items", "favicon_url", "ALTER TABLE items ADD COLUMN favicon_url TEXT"),
+    # X lane: posts from followed accounts. A self-thread is stored as one item
+    # keyed by its conversation (root post) id; theme is an AI-assigned group.
+    ("items", "x_account_id", "ALTER TABLE items ADD COLUMN x_account_id INTEGER REFERENCES x_accounts(id)"),
+    ("items", "post_id", "ALTER TABLE items ADD COLUMN post_id TEXT"),
+    ("items", "thread_len", "ALTER TABLE items ADD COLUMN thread_len INTEGER"),
+    ("items", "theme", "ALTER TABLE items ADD COLUMN theme TEXT"),
 ]
 
 
@@ -134,6 +153,7 @@ def init_db(path: str | None = None) -> None:
                 conn.execute(ddl)
         conn.execute("CREATE INDEX IF NOT EXISTS idx_items_feed ON items (feed_id)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_items_lane ON items (lane)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_items_x_account ON items (x_account_id)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_highlights_item ON highlights (item_id)")
         conn.commit()
 
