@@ -105,6 +105,36 @@ CREATE TABLE IF NOT EXISTS x_accounts (
 );
 CREATE UNIQUE INDEX IF NOT EXISTS idx_x_accounts_handle ON x_accounts (handle COLLATE NOCASE);
 
+CREATE TABLE IF NOT EXISTS discovery_runs (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    context     TEXT,                                      -- optional "I'm interested in wine"
+    kinds       TEXT NOT NULL DEFAULT 'all',               -- 'all' | 'blogs' | 'x'
+    status      TEXT NOT NULL DEFAULT 'running',           -- running|done|failed
+    error       TEXT,
+    found       INTEGER NOT NULL DEFAULT 0,                -- new suggestions this run added
+    created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+    finished_at TEXT
+);
+
+CREATE TABLE IF NOT EXISTS suggestions (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    run_id      INTEGER REFERENCES discovery_runs(id) ON DELETE SET NULL,
+    kind        TEXT NOT NULL,                             -- 'blog' | 'x'
+    key         TEXT NOT NULL,                             -- feed URL (blog) or lowercased handle (x)
+    name        TEXT NOT NULL,
+    url         TEXT,                                      -- site homepage / profile link
+    feed_url    TEXT,                                      -- verified RSS/Atom URL (blogs)
+    handle      TEXT,                                      -- without @ (x)
+    description TEXT,
+    reason      TEXT,                                      -- why it fits you
+    topics      TEXT NOT NULL DEFAULT '[]',                -- JSON list
+    status      TEXT NOT NULL DEFAULT 'new',               -- new|followed|dismissed
+    created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+    acted_at    TEXT
+);
+-- One row per source ever suggested, so dismissed ones never come back.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_suggestions_key ON suggestions (kind, key);
+
 CREATE TABLE IF NOT EXISTS highlights (
     id           INTEGER PRIMARY KEY AUTOINCREMENT,
     item_id      INTEGER NOT NULL REFERENCES items(id) ON DELETE CASCADE,
@@ -129,6 +159,11 @@ MIGRATIONS = [
     ("items", "post_id", "ALTER TABLE items ADD COLUMN post_id TEXT"),
     ("items", "thread_len", "ALTER TABLE items ADD COLUMN thread_len INTEGER"),
     ("items", "theme", "ALTER TABLE items ADD COLUMN theme TEXT"),
+    # Discover: what each run did, so the history can say why it found nothing.
+    ("discovery_runs", "proposed", "ALTER TABLE discovery_runs ADD COLUMN proposed INTEGER"),
+    ("discovery_runs", "passed", "ALTER TABLE discovery_runs ADD COLUMN passed INTEGER"),
+    ("discovery_runs", "input_tokens", "ALTER TABLE discovery_runs ADD COLUMN input_tokens INTEGER"),
+    ("discovery_runs", "output_tokens", "ALTER TABLE discovery_runs ADD COLUMN output_tokens INTEGER"),
 ]
 
 

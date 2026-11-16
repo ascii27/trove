@@ -11,7 +11,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
-from . import config, db
+from . import config, db, discoverstore
 from .routes import router
 from .worker import Worker
 
@@ -19,6 +19,8 @@ from .worker import Worker
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     db.init_db()
+    with db.cursor() as conn:
+        discoverstore.fail_interrupted_runs(conn)
     worker = None
     # Tests set TROVE_DISABLE_WORKER=1 so capture doesn't trigger real fetch/enrich.
     if os.environ.get("TROVE_DISABLE_WORKER") != "1":

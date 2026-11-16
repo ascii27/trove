@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { api, type LensResponse } from "./api";
 import { Capture } from "./components/Capture";
 import { Nav } from "./components/Nav";
@@ -7,22 +7,26 @@ import { HighlightsList } from "./components/HighlightsList";
 import { BookmarksList } from "./components/BookmarksList";
 import { Reader } from "./components/Reader";
 import { XStream } from "./components/XStream";
+import { Discover } from "./components/Discover";
 import type { Grouping } from "./xgroup";
 import {
   bookmarkPending,
   isPending,
   type Bookmark,
   type Collection,
+  type DiscoverKinds,
+  type DiscoverState,
   type Feed,
   type HighlightArchiveEntry,
   type ItemFull,
   type ItemSummary,
+  type Suggestion,
   type XAccount,
   type XPost,
   type XStatus,
 } from "./types";
 
-type View = "all" | "unread" | "feed" | "collection" | "highlights" | "bookmarks" | "x";
+type View = "all" | "unread" | "feed" | "collection" | "highlights" | "bookmarks" | "x" | "discover";
 
 const GROUPING_KEY = "trove.x.grouping";
 function initialGrouping(): Grouping {
@@ -56,6 +60,8 @@ export default function App() {
   const [matchedTopics, setMatchedTopics] = useState<string[]>([]);
   const [lensFocusTick, setLensFocusTick] = useState(0);
   const [notice, setNotice] = useState<string | null>(null);
+  // Discover's own status line, so its messages never land on another view.
+  const [discoverNotice, setDiscoverNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
   // X lane: followed accounts and their posts, read as a grouped stream.
@@ -65,6 +71,9 @@ export default function App() {
   const [xAccountId, setXAccountId] = useState<number | null>(null);
   const [xPosts, setXPosts] = useState<XPost[]>([]);
   const [xGrouping, setXGrouping] = useState<Grouping>(initialGrouping);
+  // Discover: AI-found blogs and X accounts to follow.
+  const [discover, setDiscover] = useState<DiscoverState | null>(null);
+  const discoverRunRef = useRef<DiscoverState["run"]>(null);
 
   const loadFeeds = useCallback(async () => {
     try {
@@ -118,12 +127,28 @@ export default function App() {
     }
   }, []);
 
+  const loadDiscover = useCallback(async () => {
+    try {
+      const next = await api.discover();
+      // Announce when a search that was running finishes.
+      const prev = discoverRunRef.current;
+      if (prev?.status === "running" && next.run?.id === prev.id && next.run.status === "done") {
+        const n = next.run.found;
+        setDiscoverNotice(n > 0 ? `Found ${n} new suggestion${n === 1 ? "" : "s"}.` : "Nothing new turned up this time.");
+      }
+      discoverRunRef.current = next.run;
+      setDiscover(next);
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
   const loadCurrent = useCallback(
     async (v: View, fid: number | null, cid: number | null) => {
       // Highlights/Bookmarks are their own lanes with dedicated loaders — never
       // hit the item list endpoint for them (it rejects those view names, and
       // polling calls their loaders separately).
-      if (v === "highlights" || v === "bookmarks" || v === "x") return;
+      if (v === "highlights" || v === "bookmarks" || v === "x" || v === "discover") return;
       try {
         if (v === "collection" && cid != null) {
           const res = await api.getCollection(cid);
@@ -170,8 +195,9 @@ export default function App() {
     loadHighlights();
     loadBookmarks();
     loadXAccounts();
+    loadDiscover();
     api.xStatus().then(setXStatus).catch(() => {});
-  }, [loadFeeds, loadCollections, loadHighlights, loadBookmarks, loadXAccounts]);
+  }, [loadFeeds, loadCollections, loadHighlights, loadBookmarks, loadXAccounts, loadDiscover]);
   useEffect(() => {
     setLoaded(false);
     if (view === "highlights") {
@@ -180,10 +206,20 @@ export default function App() {
       loadBookmarks().then(() => setLoaded(true));
     } else if (view === "x") {
       loadXPosts(xAccountId).then(() => setLoaded(true));
+    } else if (view === "discover") {
+      loadDiscover().then(() => setLoaded(true));
     } else {
       loadCurrent(view, feedId, collectionId);
     }
-  }, [view, feedId, collectionId, xAccountId, loadCurrent, loadHighlights, loadBookmarks, loadXPosts]);
+  }, [view, feedId, collectionId, xAccountId, loadCurrent, loadHighlights, loadBookmarks, loadXPosts, loadDiscover]);
+
+  // A discovery search runs in the background for a minute or two; poll until it lands.
+  const discoverRunning = discover?.run?.status === "running";
+  useEffect(() => {
+    if (!discoverRunning) return;
+    const id = setInterval(loadDiscover, 4000);
+    return () => clearInterval(id);
+  }, [discoverRunning, loadDiscover]);
 
   // While reading X, quietly pick up new posts and themes as the worker lands them.
   useEffect(() => {
@@ -244,7 +280,7 @@ export default function App() {
 
   const onSearch = useCallback(() => {
     // The search bar lives in the item list; leave the X stream to show it.
-    setView((v) => (v === "x" ? "all" : v));
+    setView((v) => (v === "x" || v === "discover" ? "all" : v));
     setListOpen(true);
     setSelectedId(null); // land on the list/search screen, not a lingering reader
     setSelected(null);
@@ -509,6 +545,52 @@ export default function App() {
     [xAccountId, loadXPosts, loadXAccounts]
   );
 
+  // --- discover ---
+  const onSelectDiscover = useCallback(() => {
+    setView("discover");
+    setFeedId(null);
+    setCollectionId(null);
+    setListOpen(true);
+    setLensQuery("");
+    setSelectedId(null);
+    setSelected(null);
+    setNotice(null);
+  }, []);
+
+  const onStartDiscover = useCallback(async (context: string, kinds: DiscoverKinds) => {
+    setDiscoverNotice(null);
+    const { run } = await api.startDiscover(context, kinds);
+    discoverRunRef.current = run;
+    setDiscover((prev) => (prev ? { ...prev, run, runs: [run, ...prev.runs] } : prev));
+  }, []);
+
+  const dropSuggestion = useCallback((id: number) => {
+    setDiscover((prev) => (prev ? { ...prev, suggestions: prev.suggestions.filter((x) => x.id !== id) } : prev));
+  }, []);
+
+  const onFollowSuggestion = useCallback(
+    async (s: Suggestion) => {
+      const res = await api.followSuggestion(s.id);
+      dropSuggestion(s.id);
+      if (s.kind === "blog") {
+        await loadFeeds();
+        setDiscoverNotice(res.duplicate ? `You already follow ${s.name}.` : `Subscribed to ${s.name}.`);
+      } else {
+        await loadXAccounts();
+        setDiscoverNotice(res.duplicate ? `You already follow ${s.name}.` : `Following ${s.name}.`);
+      }
+    },
+    [dropSuggestion, loadFeeds, loadXAccounts]
+  );
+
+  const onDismissSuggestion = useCallback(
+    async (s: Suggestion) => {
+      await api.dismissSuggestion(s.id);
+      dropSuggestion(s.id);
+    },
+    [dropSuggestion]
+  );
+
   const onGroupingChange = useCallback((g: Grouping) => {
     setXGrouping(g);
     try {
@@ -577,6 +659,31 @@ export default function App() {
     if (selectedId != null) setListOpen(true);
   }, [selectedId]);
 
+  // Phones scroll the window, one level (menu / list / reader) at a time, so give
+  // each new screen its own scroll: start at the top, except coming back from the
+  // reader, which returns to where you were in the list.
+  const mobileLevel = selectedId != null ? "reader" : listOpen ? "list" : "nav";
+  const paneKey = `${view}|${feedId}|${collectionId}|${xAccountId}`;
+  const listScrollY = useRef(0);
+  const levelRef = useRef(mobileLevel);
+  const prevScreen = useRef({ pane: paneKey, level: mobileLevel, item: selectedId });
+  useEffect(() => {
+    const onScroll = () => {
+      if (levelRef.current === "list") listScrollY.current = window.scrollY;
+    };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+  useLayoutEffect(() => {
+    const prev = prevScreen.current;
+    prevScreen.current = { pane: paneKey, level: mobileLevel, item: selectedId };
+    levelRef.current = mobileLevel;
+    const same = prev.pane === paneKey && prev.level === mobileLevel && prev.item === selectedId;
+    if (same || !window.matchMedia?.("(max-width: 820px)").matches) return;
+    const backToList = prev.level === "reader" && mobileLevel === "list" && prev.pane === paneKey;
+    window.scrollTo(0, backToList ? listScrollY.current : 0);
+  }, [paneKey, mobileLevel, selectedId]);
+
   const lensActive = lensQuery.trim() !== "";
   const displayItems = lensActive ? lensResults?.items ?? [] : items;
   const collectionInfo =
@@ -587,7 +694,7 @@ export default function App() {
   return (
     <div
       className={`app${listOpen ? " list-open" : ""}${selectedId != null ? " reading" : ""}${
-        view === "x" && !lensActive ? " wide" : ""
+        (view === "x" || view === "discover") && !lensActive ? " wide" : ""
       }`}
     >
       <Nav
@@ -625,8 +732,20 @@ export default function App() {
         onSelectX={onSelectX}
         onFollowX={onFollowX}
         onUnfollowX={onUnfollowX}
+        onSelectDiscover={onSelectDiscover}
+        discoverCount={discover?.suggestions.length ?? 0}
+        discoverRunning={discoverRunning}
       />
-      {view === "x" && !lensActive ? (
+      {view === "discover" && !lensActive ? (
+        <Discover
+          state={discover}
+          notice={discoverNotice}
+          onStart={onStartDiscover}
+          onFollow={onFollowSuggestion}
+          onDismiss={onDismissSuggestion}
+          onBackToNav={onBackToNav}
+        />
+      ) : view === "x" && !lensActive ? (
         <XStream
           posts={xPosts}
           account={xAccounts.find((a) => a.id === xAccountId) ?? null}
@@ -665,7 +784,7 @@ export default function App() {
       ) : (
         <List
           items={displayItems}
-          view={view === "x" ? "all" : view}
+          view={view === "x" || view === "discover" ? "all" : view}
           feedTitle={view === "feed" ? feeds.find((f) => f.id === feedId)?.title ?? "Feed" : null}
           collectionInfo={collectionInfo}
           loaded={loaded}
