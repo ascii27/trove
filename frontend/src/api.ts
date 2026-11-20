@@ -4,11 +4,15 @@ import type {
   DiscoverKinds,
   DiscoverRun,
   DiscoverState,
+  Edition,
   Feed,
   Highlight,
   HighlightArchiveEntry,
   ItemFull,
   ItemSummary,
+  PaperSchedule,
+  PaperSettings,
+  PaperState,
   Suggestion,
   XAccount,
   XPost,
@@ -147,4 +151,13 @@ export const api = {
     ),
   dismissSuggestion: (id: number) =>
     req<{ suggestion: Suggestion }>(`/api/discover/suggestions/${id}/dismiss`, { method: "POST" }),
+
+  paper: () => req<PaperState>("/api/newspaper"),
+  printEdition: () => req<PaperState>("/api/newspaper", { method: "POST" }),
+  edition: (id: number) => req<{ edition: Edition }>(`/api/newspaper/editions/${id}`),
+  savePaperSettings: (schedule: PaperSchedule, hour: number, tz: string) =>
+    req<{ settings: PaperSettings }>("/api/newspaper/settings", {
+      method: "PUT",
+      body: JSON.stringify({ schedule, hour, tz }),
+    }),
 };

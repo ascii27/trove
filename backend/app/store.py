@@ -250,6 +250,8 @@ def apply_extraction(conn: sqlite3.Connection, item_id: int, result: Extracted) 
             item_id,
         ),
     )
+    if result.image:
+        conn.execute("UPDATE items SET image_url = COALESCE(image_url, ?) WHERE id = ?", (result.image, item_id))
     if result.status in ("extracted", "partial") and not _enrichment_deferred(conn, item_id):
         enqueue_job(conn, item_id, "enrich")
 
@@ -331,9 +333,10 @@ def ingest_entries(
         status = "pending" if make_eager else "deferred"
         cur = conn.execute(
             "INSERT INTO items (url_canonical, original_url, lane, feed_id, title, source, "
-            "publish_date, published_at, summary, extraction_status, enrichment_status) "
-            "VALUES (?, ?, 'feed', ?, ?, ?, ?, ?, ?, ?, 'deferred')",
-            (canon, entry.link, feed_id, entry.title, feed_title, entry.published, entry.published_at, entry.summary, status),
+            "publish_date, published_at, summary, image_url, extraction_status, enrichment_status) "
+            "VALUES (?, ?, 'feed', ?, ?, ?, ?, ?, ?, ?, ?, 'deferred')",
+            (canon, entry.link, feed_id, entry.title, feed_title, entry.published, entry.published_at,
+             entry.summary, getattr(entry, "image", None), status),
         )
         if make_eager:
             enqueue_job(conn, cur.lastrowid, "extract")

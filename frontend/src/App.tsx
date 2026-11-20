@@ -8,6 +8,7 @@ import { BookmarksList } from "./components/BookmarksList";
 import { Reader } from "./components/Reader";
 import { XStream } from "./components/XStream";
 import { Discover } from "./components/Discover";
+import { Newspaper } from "./components/Newspaper";
 import type { Grouping } from "./xgroup";
 import {
   bookmarkPending,
@@ -16,6 +17,10 @@ import {
   type Collection,
   type DiscoverKinds,
   type DiscoverState,
+  type Edition,
+  type PaperSchedule,
+  type PaperState,
+  type PaperStory,
   type Feed,
   type HighlightArchiveEntry,
   type ItemFull,
@@ -26,7 +31,7 @@ import {
   type XStatus,
 } from "./types";
 
-type View = "all" | "unread" | "feed" | "collection" | "highlights" | "bookmarks" | "x" | "discover";
+type View = "all" | "unread" | "feed" | "collection" | "highlights" | "bookmarks" | "x" | "discover" | "newspaper";
 
 const GROUPING_KEY = "trove.x.grouping";
 function initialGrouping(): Grouping {
@@ -74,6 +79,12 @@ export default function App() {
   // Discover: AI-found blogs and X accounts to follow.
   const [discover, setDiscover] = useState<DiscoverState | null>(null);
   const discoverRunRef = useRef<DiscoverState["run"]>(null);
+  // Newspaper: editions list + settings, and the issue on screen.
+  const [paper, setPaper] = useState<PaperState | null>(null);
+  const [edition, setEdition] = useState<Edition | null>(null);
+  const [loadingEdition, setLoadingEdition] = useState(false);
+  const shownLatestRef = useRef<number | null>(null); // latest_id when we last followed it
+  const editionIdRef = useRef<number | null>(null);
 
   const loadFeeds = useCallback(async () => {
     try {
@@ -143,12 +154,40 @@ export default function App() {
     }
   }, []);
 
+  const showEdition = useCallback(async (id: number) => {
+    editionIdRef.current = id;
+    setLoadingEdition(true);
+    try {
+      const { edition: ed } = await api.edition(id);
+      if (editionIdRef.current === id) setEdition(ed);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setLoadingEdition(false);
+    }
+  }, []);
+
+  const loadPaper = useCallback(async () => {
+    try {
+      const next = await api.paper();
+      setPaper(next);
+      // Follow the newest issue unless you're reading a back issue.
+      const viewingLatest = editionIdRef.current == null || editionIdRef.current === shownLatestRef.current;
+      if (next.latest_id != null && next.latest_id !== shownLatestRef.current && viewingLatest) {
+        shownLatestRef.current = next.latest_id;
+        await showEdition(next.latest_id);
+      }
+    } catch {
+      /* ignore */
+    }
+  }, [showEdition]);
+
   const loadCurrent = useCallback(
     async (v: View, fid: number | null, cid: number | null) => {
       // Highlights/Bookmarks are their own lanes with dedicated loaders — never
       // hit the item list endpoint for them (it rejects those view names, and
       // polling calls their loaders separately).
-      if (v === "highlights" || v === "bookmarks" || v === "x" || v === "discover") return;
+      if (v === "highlights" || v === "bookmarks" || v === "x" || v === "discover" || v === "newspaper") return;
       try {
         if (v === "collection" && cid != null) {
           const res = await api.getCollection(cid);
@@ -196,8 +235,9 @@ export default function App() {
     loadBookmarks();
     loadXAccounts();
     loadDiscover();
+    loadPaper();
     api.xStatus().then(setXStatus).catch(() => {});
-  }, [loadFeeds, loadCollections, loadHighlights, loadBookmarks, loadXAccounts, loadDiscover]);
+  }, [loadFeeds, loadCollections, loadHighlights, loadBookmarks, loadXAccounts, loadDiscover, loadPaper]);
   useEffect(() => {
     setLoaded(false);
     if (view === "highlights") {
@@ -208,10 +248,20 @@ export default function App() {
       loadXPosts(xAccountId).then(() => setLoaded(true));
     } else if (view === "discover") {
       loadDiscover().then(() => setLoaded(true));
+    } else if (view === "newspaper") {
+      loadPaper().then(() => setLoaded(true));
     } else {
       loadCurrent(view, feedId, collectionId);
     }
-  }, [view, feedId, collectionId, xAccountId, loadCurrent, loadHighlights, loadBookmarks, loadXPosts, loadDiscover]);
+  }, [view, feedId, collectionId, xAccountId, loadCurrent, loadHighlights, loadBookmarks, loadXPosts, loadDiscover, loadPaper]);
+
+  // An edition prints in the background; poll until it lands.
+  const paperRunning = paper?.running != null;
+  useEffect(() => {
+    if (!paperRunning) return;
+    const id = setInterval(loadPaper, 3000);
+    return () => clearInterval(id);
+  }, [paperRunning, loadPaper]);
 
   // A discovery search runs in the background for a minute or two; poll until it lands.
   const discoverRunning = discover?.run?.status === "running";
@@ -278,9 +328,23 @@ export default function App() {
     [loadFeeds, lensResults]
   );
 
+  // A story in the paper opens in the reader; if it's gone from the library, open the original.
+  const onOpenStory = useCallback(
+    async (story: PaperStory) => {
+      try {
+        await api.get(story.item_id);
+      } catch {
+        window.open(story.url, "_blank", "noopener");
+        return;
+      }
+      openItem(story.item_id);
+    },
+    [openItem]
+  );
+
   const onSearch = useCallback(() => {
     // The search bar lives in the item list; leave the X stream to show it.
-    setView((v) => (v === "x" || v === "discover" ? "all" : v));
+    setView((v) => (v === "x" || v === "discover" || v === "newspaper" ? "all" : v));
     setListOpen(true);
     setSelectedId(null); // land on the list/search screen, not a lingering reader
     setSelected(null);
@@ -545,6 +609,34 @@ export default function App() {
     [xAccountId, loadXPosts, loadXAccounts]
   );
 
+  // --- newspaper ---
+  const onSelectNewspaper = useCallback(() => {
+    setView("newspaper");
+    setFeedId(null);
+    setCollectionId(null);
+    setListOpen(true);
+    setLensQuery("");
+    setSelectedId(null);
+    setSelected(null);
+  }, []);
+
+  const onPrintEdition = useCallback(async () => {
+    setPaper(await api.printEdition());
+  }, []);
+
+  const onSelectEdition = useCallback(
+    (id: number) => {
+      void showEdition(id);
+    },
+    [showEdition]
+  );
+
+  const onSavePaperSchedule = useCallback(async (schedule: PaperSchedule, hour: number) => {
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+    const { settings } = await api.savePaperSettings(schedule, hour, tz);
+    setPaper((prev) => (prev ? { ...prev, settings } : prev));
+  }, []);
+
   // --- discover ---
   const onSelectDiscover = useCallback(() => {
     setView("discover");
@@ -685,6 +777,7 @@ export default function App() {
   }, [paneKey, mobileLevel, selectedId]);
 
   const lensActive = lensQuery.trim() !== "";
+  const wideView = (view === "x" || view === "discover" || view === "newspaper") && !lensActive;
   const displayItems = lensActive ? lensResults?.items ?? [] : items;
   const collectionInfo =
     view === "collection" && collectionId != null
@@ -694,8 +787,8 @@ export default function App() {
   return (
     <div
       className={`app${listOpen ? " list-open" : ""}${selectedId != null ? " reading" : ""}${
-        (view === "x" || view === "discover") && !lensActive ? " wide" : ""
-      }`}
+        wideView ? " wide" : ""
+      }${view === "newspaper" && !lensActive && selectedId != null ? " paper-reading" : ""}`}
     >
       <Nav
         view={view}
@@ -733,10 +826,23 @@ export default function App() {
         onFollowX={onFollowX}
         onUnfollowX={onUnfollowX}
         onSelectDiscover={onSelectDiscover}
+        onSelectNewspaper={onSelectNewspaper}
+        newspaperPrinting={paperRunning}
         discoverCount={discover?.suggestions.length ?? 0}
         discoverRunning={discoverRunning}
       />
-      {view === "discover" && !lensActive ? (
+      {view === "newspaper" && !lensActive ? (
+        <Newspaper
+          state={paper}
+          edition={edition}
+          loadingEdition={loadingEdition}
+          onSelectEdition={onSelectEdition}
+          onPrint={onPrintEdition}
+          onSaveSchedule={onSavePaperSchedule}
+          onOpenStory={onOpenStory}
+          onBackToNav={onBackToNav}
+        />
+      ) : view === "discover" && !lensActive ? (
         <Discover
           state={discover}
           notice={discoverNotice}
@@ -784,7 +890,7 @@ export default function App() {
       ) : (
         <List
           items={displayItems}
-          view={view === "x" || view === "discover" ? "all" : view}
+          view={view === "x" || view === "discover" || view === "newspaper" ? "all" : view}
           feedTitle={view === "feed" ? feeds.find((f) => f.id === feedId)?.title ?? "Feed" : null}
           collectionInfo={collectionInfo}
           loaded={loaded}

@@ -11,7 +11,8 @@ _PARA = (
 
 
 def _article_html(n_paragraphs: int) -> str:
-    body = "".join(f"<p>{_PARA}</p>" for _ in range(n_paragraphs))
+    # Distinct paragraphs: trafilatura 2.x drops exact-duplicate paragraphs as boilerplate.
+    body = "".join(f"<p>{_PARA} (Point {i + 1}.)</p>" for i in range(n_paragraphs))
     return f"""<!doctype html><html><head>
     <title>The anatomy of an internal developer platform</title>
     <meta name="author" content="Susanne Kaiser">

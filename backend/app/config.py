@@ -75,3 +75,9 @@ def discover_model() -> str:
 def discover_effort() -> str:
     return os.environ.get("TROVE_DISCOVER_EFFORT", "low")
 
+
+
+# ---- Newspaper ----
+def paper_model() -> str:
+    """The editor that assembles each edition: one structured call over ~100 short candidates."""
+    return os.environ.get("TROVE_PAPER_MODEL", "claude-haiku-5-5")

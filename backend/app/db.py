@@ -135,6 +135,38 @@ CREATE TABLE IF NOT EXISTS suggestions (
 -- One row per source ever suggested, so dismissed ones never come back.
 CREATE UNIQUE INDEX IF NOT EXISTS idx_suggestions_key ON suggestions (kind, key);
 
+CREATE TABLE IF NOT EXISTS editions (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    number        INTEGER,                                 -- No. on the masthead (done editions only)
+    status        TEXT NOT NULL DEFAULT 'running',         -- running|done|failed
+    trigger       TEXT NOT NULL DEFAULT 'manual',          -- manual|schedule
+    error         TEXT,
+    window_start  TEXT NOT NULL,                           -- UTC; stories published after this
+    layout        TEXT,                                    -- JSON: the assembled paper (self-contained)
+    story_count   INTEGER,
+    input_tokens  INTEGER,
+    output_tokens INTEGER,
+    created_at    TEXT NOT NULL DEFAULT (datetime('now')),
+    finished_at   TEXT
+);
+
+-- Every item ever printed, so no story appears in two editions.
+CREATE TABLE IF NOT EXISTS edition_items (
+    edition_id INTEGER NOT NULL REFERENCES editions(id) ON DELETE CASCADE,
+    item_id    INTEGER NOT NULL,                           -- no FK: deleting an item keeps the record
+    PRIMARY KEY (edition_id, item_id)
+);
+CREATE INDEX IF NOT EXISTS idx_edition_items_item ON edition_items (item_id);
+
+-- One row (id = 1): when to print automatically.
+CREATE TABLE IF NOT EXISTS newspaper_settings (
+    id             INTEGER PRIMARY KEY CHECK (id = 1),
+    schedule       TEXT NOT NULL DEFAULT 'off',            -- off|daily|weekdays|weekends
+    hour           INTEGER NOT NULL DEFAULT 6,             -- local hour the edition is ready by
+    tz             TEXT NOT NULL DEFAULT 'UTC',            -- IANA zone, from the browser
+    last_scheduled TEXT                                    -- local date (YYYY-MM-DD) last auto-printed
+);
+
 CREATE TABLE IF NOT EXISTS highlights (
     id           INTEGER PRIMARY KEY AUTOINCREMENT,
     item_id      INTEGER NOT NULL REFERENCES items(id) ON DELETE CASCADE,
@@ -164,6 +196,8 @@ MIGRATIONS = [
     ("discovery_runs", "passed", "ALTER TABLE discovery_runs ADD COLUMN passed INTEGER"),
     ("discovery_runs", "input_tokens", "ALTER TABLE discovery_runs ADD COLUMN input_tokens INTEGER"),
     ("discovery_runs", "output_tokens", "ALTER TABLE discovery_runs ADD COLUMN output_tokens INTEGER"),
+    # Newspaper: a lead image per item (feed media, page og:image, or a post's first photo).
+    ("items", "image_url", "ALTER TABLE items ADD COLUMN image_url TEXT"),
 ]
 
 
@@ -190,6 +224,7 @@ def init_db(path: str | None = None) -> None:
         conn.execute("CREATE INDEX IF NOT EXISTS idx_items_lane ON items (lane)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_items_x_account ON items (x_account_id)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_highlights_item ON highlights (item_id)")
+        conn.execute("INSERT OR IGNORE INTO newspaper_settings (id) VALUES (1)")
         conn.commit()
 
 

@@ -3,7 +3,7 @@ import type { Collection, Feed, XAccount } from "../types";
 import { AddFeed } from "./AddFeed";
 
 interface Props {
-  view: "all" | "unread" | "feed" | "collection" | "highlights" | "bookmarks" | "x" | "discover";
+  view: "all" | "unread" | "feed" | "collection" | "highlights" | "bookmarks" | "x" | "discover" | "newspaper";
   feedId: number | null;
   feeds: Feed[];
   collections: Collection[];
@@ -32,6 +32,8 @@ interface Props {
   onSelectDiscover?: () => void;
   discoverCount?: number;
   discoverRunning?: boolean;
+  onSelectNewspaper?: () => void;
+  newspaperPrinting?: boolean;
 }
 
 export function Nav({
@@ -64,6 +66,8 @@ export function Nav({
   onSelectDiscover,
   discoverCount = 0,
   discoverRunning = false,
+  onSelectNewspaper,
+  newspaperPrinting = false,
 }: Props) {
   const [confirmFeed, setConfirmFeed] = useState<number | null>(null);
   const [confirmX, setConfirmX] = useState<number | null>(null);
@@ -84,6 +88,26 @@ export function Nav({
         </svg>
         <span>Search</span>
       </button>
+      {onSelectNewspaper && (
+        <button
+          className={`nav-item nav-search ${!lensActive && view === "newspaper" ? "active" : ""}`}
+          onClick={onSelectNewspaper}
+          aria-current={!lensActive && view === "newspaper"}
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+            <path d="M4 5h13v14H6a2 2 0 0 1-2-2z" />
+            <path d="M17 9h3v8a2 2 0 0 1-2 2" />
+            <path d="M7 9h7M7 13h7M7 16h4" />
+          </svg>
+          <span>Today's paper</span>
+          {newspaperPrinting && (
+            <span className="count disc-nav-running" title="An edition is being printed">
+              <span className="disc-dot" aria-hidden="true" />
+              Printing
+            </span>
+          )}
+        </button>
+      )}
       {onSelectDiscover && (
         <button
           className={`nav-item nav-search ${!lensActive && view === "discover" ? "active" : ""}`}

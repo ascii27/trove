@@ -34,6 +34,7 @@ class Extracted:
     word_count: int = 0
     reading_minutes: int = 0
     error: str | None = None
+    image: str | None = None  # the page's og:image, when it declares one
     extra: dict = field(default_factory=dict)
 
 
@@ -61,6 +62,7 @@ def extract_from_html(html: str, url: str) -> Extracted:
     author = getattr(meta, "author", None) if meta else None
     source = (getattr(meta, "sitename", None) or getattr(meta, "hostname", None)) if meta else None
     publish_date = getattr(meta, "date", None) if meta else None
+    image = getattr(meta, "image", None) if meta else None
 
     word_count = len(content.split())
     status = "partial" if word_count < _PARTIAL_WORD_THRESHOLD else "extracted"
@@ -74,7 +76,18 @@ def extract_from_html(html: str, url: str) -> Extracted:
         content_text=content,
         word_count=word_count,
         reading_minutes=_reading_minutes(word_count),
+        image=image if image and image.startswith("http") else None,
     )
+
+
+def page_image(html: str, url: str) -> str | None:
+    """Pure: the page's og:image / twitter:image, or None."""
+    try:
+        meta = trafilatura.extract_metadata(html, default_url=url)
+    except Exception:  # noqa: BLE001
+        return None
+    image = getattr(meta, "image", None) if meta else None
+    return image if image and image.startswith("http") else None
 
 
 def fetch_html(url: str, *, timeout: float = 20.0) -> str:

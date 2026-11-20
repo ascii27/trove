@@ -144,9 +144,9 @@ def ingest_threads(conn: sqlite3.Connection, account: sqlite3.Row, threads: list
             continue
         conn.execute(
             "INSERT INTO items (url_canonical, original_url, lane, x_account_id, post_id, thread_len, "
-            "title, author, source, published_at, content_text, word_count, "
+            "title, author, source, published_at, content_text, word_count, image_url, "
             "extraction_status, enrichment_status) "
-            "VALUES (?, ?, 'x', ?, ?, ?, ?, ?, ?, ?, ?, ?, 'extracted', 'skipped')",
+            "VALUES (?, ?, 'x', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'extracted', 'skipped')",
             (
                 canon,
                 url,
@@ -159,6 +159,7 @@ def ingest_threads(conn: sqlite3.Connection, account: sqlite3.Row, threads: list
                 th.created_at,
                 th.markdown,
                 len(th.plain.split()),
+                next((img for p in th.posts for img in p.images), None),
             ),
         )
         created += 1

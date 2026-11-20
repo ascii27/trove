@@ -7,6 +7,7 @@ items. Single thread => the worker is a singleton, matching single-user load.
 """
 from __future__ import annotations
 
+import logging
 import sqlite3
 import threading
 import time
@@ -14,7 +15,9 @@ import time
 from . import config, db, store
 from . import enrich as enrich_mod
 from . import extract as extract_mod
-from . import feedfetch, xsource, xstore, xthemes
+from . import feedfetch, newspaper, xsource, xstore, xthemes
+
+log = logging.getLogger(__name__)
 
 
 def process_job(
@@ -149,11 +152,20 @@ class Worker:
             except Exception:  # noqa: BLE001 - themes are a nicety; back off and retry later
                 conn.rollback()
                 self._theme_backoff_until = now + 900
+        if config.anthropic_api_key():
+            try:
+                newspaper.maybe_print(conn)
+            except Exception:  # noqa: BLE001 - a missed edition must not stop polling
+                conn.rollback()
+                log.exception("scheduled edition failed to start")
         if now - self._last_age >= config.feed_age_sweep_seconds():
             store.age_feed_items(conn, config.feed_age_days())
             xstore.age_posts(conn, config.feed_age_days())
             conn.commit()
             self._last_age = now
+        # This connection lives as long as the worker: never leave a transaction open
+        # (an uncommitted write here holds SQLite's write lock and 500s every other writer).
+        conn.commit()
 
     def _run(self) -> None:
         conn = db.connect(self.db_path)

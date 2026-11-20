@@ -41,6 +41,10 @@ vi.mock("../api", () => ({
     startDiscover: vi.fn(),
     followSuggestion: vi.fn(),
     dismissSuggestion: vi.fn(),
+    paper: vi.fn(),
+    printEdition: vi.fn(),
+    edition: vi.fn(),
+    savePaperSettings: vi.fn(),
   },
 }));
 
@@ -56,7 +60,27 @@ beforeEach(() => {
   mockApi.xAccounts.mockResolvedValue({ accounts: [], unread_count: 0 });
   mockApi.xPosts.mockResolvedValue({ posts: [], unread_count: 0 });
   mockApi.discover.mockResolvedValue(discoverState());
+  mockApi.paper.mockResolvedValue(paperState());
 });
+
+const SETTINGS = { schedule: "off", hour: 6, tz: "UTC", last_scheduled: null };
+
+function paperState(over: Record<string, unknown> = {}) {
+  return { editions: [], running: null, latest_id: null, settings: SETTINGS, ...over };
+}
+
+function story(id: number, headline: string, over: Record<string, unknown> = {}) {
+  return {
+    item_id: id, lane: "feed", headline, summary: `Summary of ${headline}.`, original_title: headline,
+    source: "Example Weekly", author: null, url: `https://example.com/${id}`, image: null,
+    published_at: "2026-11-20T08:00:00", ...over,
+  };
+}
+
+const EDITION_1 = {
+  id: 1, number: 1, status: "done", trigger: "manual", error: null, window_start: "2026-11-17 00:00:00",
+  story_count: 3, created_at: "2026-11-20 06:00:00", finished_at: "2026-11-20 06:00:20",
+};
 
 function discoverState(over: Record<string, unknown> = {}) {
   return {
@@ -264,4 +288,41 @@ describe("App", () => {
     expect(screen.queryByText("Subscribed to Wine Folly.")).not.toBeInTheDocument();
     expect(screen.queryByText("Found 1 new suggestion.")).not.toBeInTheDocument();
   }, 10000);
+
+  it("prints the first edition, then opens a story from it in the reader", async () => {
+    mockApi.list.mockResolvedValue({ items: [], unread_count: 0 });
+    const running = { ...EDITION_1, status: "running", number: null, story_count: null };
+    mockApi.printEdition.mockResolvedValue(paperState({ editions: [running], running }));
+    mockApi.edition.mockResolvedValue({
+      edition: {
+        ...EDITION_1,
+        layout: {
+          editors_note: "A quiet news day.",
+          lead: story(5, "Nvidia gets a new CEO"),
+          sections: [{ name: "Engineering", stories: [story(6, "Healthier code is cheaper to review")] }],
+          from_x: [story(7, "Mitchell Hashimoto", { lane: "x", summary: "Rex now works over SSH." })],
+          from_shelf: [],
+          source_count: 2,
+        },
+      },
+    });
+    mockApi.get.mockResolvedValue({ item: full({ id: 6, read_state: "read", title: "Healthier code" }) });
+
+    render(<App />);
+    await userEvent.click(await screen.findByRole("button", { name: /^Today's paper/ }));
+    await userEvent.click(await screen.findByRole("button", { name: "Print the first edition" }));
+    expect(mockApi.printEdition).toHaveBeenCalled();
+    expect(await screen.findByRole("status")).toHaveTextContent("Printing a new edition");
+
+    // The poll sees the finished edition and shows it.
+    mockApi.paper.mockResolvedValue(paperState({ editions: [EDITION_1], latest_id: 1 }));
+    expect(await screen.findByText("Nvidia gets a new CEO", {}, { timeout: 6000 })).toBeInTheDocument();
+    expect(screen.getByText("A quiet news day.")).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Engineering" })).toBeInTheDocument();
+    expect(screen.getByText("Rex now works over SSH.")).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("link", { name: "Healthier code is cheaper to review" }));
+    await waitFor(() => expect(mockApi.get).toHaveBeenCalledWith(6));
+    expect(await screen.findByRole("button", { name: /mark unread/i })).toBeInTheDocument();
+  }, 12000);
 });
