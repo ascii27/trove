@@ -163,6 +163,9 @@ class Worker:
             xstore.age_posts(conn, config.feed_age_days())
             conn.commit()
             self._last_age = now
+        # This connection lives as long as the worker: never leave a transaction open
+        # (an uncommitted write here holds SQLite's write lock and 500s every other writer).
+        conn.commit()
 
     def _run(self) -> None:
         conn = db.connect(self.db_path)

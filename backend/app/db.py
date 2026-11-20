@@ -224,6 +224,7 @@ def init_db(path: str | None = None) -> None:
         conn.execute("CREATE INDEX IF NOT EXISTS idx_items_lane ON items (lane)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_items_x_account ON items (x_account_id)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_highlights_item ON highlights (item_id)")
+        conn.execute("INSERT OR IGNORE INTO newspaper_settings (id) VALUES (1)")
         conn.commit()
 
 

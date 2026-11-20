@@ -241,3 +241,33 @@ def test_page_image_reads_og_image():
             "<body><article><p>" + "Words here. " * 80 + "</p></article></body></html>")
     assert extract.page_image(html, "https://e.example/a") == "https://img.example/hero.jpg"
     assert extract.extract_from_html(html, "https://e.example/a").image == "https://img.example/hero.jpg"
+
+
+def test_schedule_check_leaves_no_open_transaction(db_path):
+    """Regression: the worker's check wrote a settings row without committing, which held
+    SQLite's write lock on its long-lived connection and 500'd every other writer."""
+    worker_conn = db.connect(db_path)
+    other = db.connect(db_path)
+    other.execute("PRAGMA busy_timeout=200")
+    try:
+        assert newspaper.maybe_print(worker_conn, _utc("2026-11-20T07:00:00"), launch_fn=lambda e: None) is None
+        assert not worker_conn.in_transaction
+        other.execute("UPDATE newspaper_settings SET hour = 7 WHERE id = 1")  # would raise "database is locked"
+        other.commit()
+    finally:
+        worker_conn.close()
+        other.close()
+
+
+def test_worker_maintenance_never_leaves_a_transaction_open(db_path, monkeypatch):
+    from app import worker
+
+    monkeypatch.setattr(worker.config, "anthropic_api_key", lambda: "k")
+    monkeypatch.setattr(worker, "theme_posts", lambda conn: conn.execute("UPDATE items SET theme = theme"))
+    w = worker.Worker(db_path=db_path)
+    conn = db.connect(db_path)
+    try:
+        w._maintenance(conn)
+        assert not conn.in_transaction
+    finally:
+        conn.close()

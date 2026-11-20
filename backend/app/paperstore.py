@@ -207,14 +207,18 @@ def delete_edition(conn: sqlite3.Connection, eid: int) -> bool:
 
 
 # --------------------------------------------------------------- settings ----
+_DEFAULT_SETTINGS = {"schedule": "off", "hour": 6, "tz": "UTC", "last_scheduled": None}
+
+
 def get_settings(conn: sqlite3.Connection) -> dict:
-    conn.execute("INSERT OR IGNORE INTO newspaper_settings (id) VALUES (1)")
+    """Read-only on purpose: the worker calls this every pass on a long-lived connection,
+    and a write here left a transaction open that locked the database for everyone."""
     row = conn.execute("SELECT schedule, hour, tz, last_scheduled FROM newspaper_settings WHERE id = 1").fetchone()
-    return dict(row)
+    return dict(row) if row else dict(_DEFAULT_SETTINGS)
 
 
 def save_settings(conn: sqlite3.Connection, schedule: str, hour: int, tz: str) -> dict:
-    get_settings(conn)
+    conn.execute("INSERT OR IGNORE INTO newspaper_settings (id) VALUES (1)")
     conn.execute(
         "UPDATE newspaper_settings SET schedule = ?, hour = ?, tz = ? WHERE id = 1", (schedule, hour, tz)
     )
@@ -222,4 +226,5 @@ def save_settings(conn: sqlite3.Connection, schedule: str, hour: int, tz: str) -
 
 
 def mark_scheduled(conn: sqlite3.Connection, local_date: str) -> None:
+    conn.execute("INSERT OR IGNORE INTO newspaper_settings (id) VALUES (1)")
     conn.execute("UPDATE newspaper_settings SET last_scheduled = ? WHERE id = 1", (local_date,))
