@@ -166,12 +166,14 @@ export interface DiscoverRun {
   output_tokens: number | null;
   created_at: string; // UTC, "YYYY-MM-DD HH:MM:SS"
   finished_at: string | null;
+  to_review: number; // its suggestions still waiting for follow / not for me
+  total: number; // everything it found
 }
 
 export interface DiscoverState {
   run: DiscoverRun | null;
-  runs: DiscoverRun[]; // newest first
-  suggestions: Suggestion[];
+  runs: DiscoverRun[]; // newest first, last 25
+  to_review: number; // across all kept searches
   profile: { topics: string[]; feed_count: number; x_count: number; collections: string[] };
   x_configured: boolean;
 }

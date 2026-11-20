@@ -40,6 +40,8 @@ vi.mock("../api", () => ({
     discover: vi.fn(),
     startDiscover: vi.fn(),
     followSuggestion: vi.fn(),
+    discoverRun: vi.fn(),
+    restoreSuggestion: vi.fn(),
     dismissSuggestion: vi.fn(),
     paper: vi.fn(),
     printEdition: vi.fn(),
@@ -86,7 +88,7 @@ function discoverState(over: Record<string, unknown> = {}) {
   return {
     run: null,
     runs: [],
-    suggestions: [],
+    to_review: 0,
     profile: { topics: ["AI"], feed_count: 2, x_count: 0, collections: [] },
     x_configured: true,
     ...over,
@@ -257,7 +259,8 @@ describe("App", () => {
   it("runs a discovery search with context and subscribes to a suggested blog", async () => {
     mockApi.list.mockResolvedValue({ items: [], unread_count: 0 });
     const running = { id: 1, context: "natural wine", kinds: "all", status: "running", error: null, found: 0,
-      created_at: "", finished_at: null };
+      proposed: null, passed: null, input_tokens: null, output_tokens: null, to_review: 0, total: 0,
+      created_at: "2026-11-20 06:00:00", finished_at: null };
     mockApi.startDiscover.mockResolvedValue({ run: running });
     mockApi.followSuggestion.mockResolvedValue({ suggestion: { ...wineBlog, status: "followed" }, duplicate: false,
       feed: feed({ id: 4, title: "Wine Folly" }) });
@@ -269,18 +272,24 @@ describe("App", () => {
     await userEvent.type(screen.getByLabelText(/anything specific/i), "natural wine");
     await userEvent.click(screen.getByRole("button", { name: "Find suggestions" }));
     expect(mockApi.startDiscover).toHaveBeenCalledWith("natural wine", "all");
-    expect(await screen.findByRole("status")).toHaveTextContent("for “natural wine”");
+    // The new search joins the list and opens, showing it's under way.
+    expect(await screen.findByRole("status")).toHaveTextContent("Finding writers");
+    expect(screen.getByRole("button", { name: /“natural wine”/ })).toHaveAttribute("aria-current", "true");
 
-    // The poll picks up the finished run.
-    const done = { ...running, status: "done", found: 1, proposed: 22, passed: 1 };
-    mockApi.discover.mockResolvedValue(discoverState({ run: done, runs: [done], suggestions: [wineBlog] }));
+    // The poll picks up the finished run, and its results load.
+    const done = { ...running, status: "done", found: 1, proposed: 22, passed: 1, to_review: 1, total: 1 };
+    mockApi.discover.mockResolvedValue(discoverState({ run: done, runs: [done], to_review: 1 }));
+    mockApi.discoverRun.mockResolvedValue({ run: done, suggestions: [wineBlog] });
     expect(await screen.findByText("Wine Folly", {}, { timeout: 6000 })).toBeInTheDocument();
+    expect(mockApi.discoverRun).toHaveBeenCalledWith(1);
+    expect(screen.getByRole("button", { name: "To review (1)" })).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByText("Found 1 new suggestion.")).toBeInTheDocument();
 
     mockApi.feeds.mockResolvedValue({ feeds: [feed({ id: 4, title: "Wine Folly" })] });
     await userEvent.click(screen.getByRole("button", { name: "Subscribe" }));
     expect(mockApi.followSuggestion).toHaveBeenCalledWith(11);
     expect(await screen.findByText("Subscribed to Wine Folly.")).toBeInTheDocument();
+    expect(await screen.findByText("✓ Subscribed")).toBeInTheDocument(); // stays in the search's results
     expect(screen.getByRole("button", { name: /^Wine Folly/ })).toBeInTheDocument(); // now in the nav
 
     // Discover's messages stay on Discover.

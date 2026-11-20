@@ -407,7 +407,7 @@ def _discover_state(conn) -> dict:
     return {
         "run": discoverstore.latest_run(conn),
         "runs": discoverstore.list_runs(conn),
-        "suggestions": discoverstore.list_suggestions(conn, "new"),
+        "to_review": discoverstore.to_review_total(conn),
         "profile": discoverstore.build_profile(conn).summary(),
         "x_configured": xsource.get_source() is not None,
     }
@@ -453,6 +453,28 @@ def follow_suggestion(sid: int) -> dict:
     with db.cursor() as conn:
         discoverstore.set_status(conn, sid, "followed")
         return {**result, "suggestion": discoverstore.get_suggestion(conn, sid)}
+
+
+@router.get("/discover/runs/{run_id}")
+def get_discover_run(run_id: int) -> dict:
+    with db.cursor() as conn:
+        discoverstore.reconcile_followed(conn)
+        run = discoverstore.get_run(conn, run_id)
+        if run is None:
+            raise HTTPException(status_code=404, detail="That search is no longer in your history.")
+        return {"run": run, "suggestions": discoverstore.run_suggestions(conn, run_id)}
+
+
+@router.post("/discover/suggestions/{sid}/restore")
+def restore_suggestion(sid: int) -> dict:
+    """Undo "Not for me"."""
+    with db.cursor() as conn:
+        s = discoverstore.get_suggestion(conn, sid)
+        if s is None:
+            raise HTTPException(status_code=404, detail="Suggestion not found.")
+        if s["status"] == "dismissed":
+            discoverstore.set_status(conn, sid, "new")
+        return {"suggestion": discoverstore.get_suggestion(conn, sid)}
 
 
 @router.post("/discover/suggestions/{sid}/dismiss")

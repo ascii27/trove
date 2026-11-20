@@ -1567,51 +1567,6 @@ body {
   height: 6px;
   margin-right: 5px;
 }
-.disc-filter {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  margin-top: 16px;
-  font-size: 12.5px;
-  color: var(--ink-soft);
-}
-.disc-filter .ghost-sm {
-  flex: none;
-  white-space: nowrap;
-}
-.disc-runs {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-}
-.disc-run {
-  padding: 10px 0;
-  border-bottom: 1px solid var(--line-soft);
-}
-.disc-run-main {
-  display: flex;
-  justify-content: space-between;
-  gap: 10px;
-}
-.disc-run-label {
-  font-weight: 600;
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-.disc-run-time {
-  flex: none;
-  font-size: 12px;
-  color: var(--ink-faint);
-}
-.disc-run-outcome {
-  margin-top: 3px;
-  font-size: 12.5px;
-  color: var(--ink-soft);
-}
-.disc-run--failed .disc-run-outcome {
-  color: #a23b2f;
-}
 .disc-run-show {
   font: inherit;
   margin-left: 8px;
@@ -1625,12 +1580,6 @@ body {
   50% {
     opacity: 0.25;
   }
-}
-.disc-body {
-  scroll-margin-top: 8px;
-  max-width: 680px;
-  margin: 0 auto;
-  padding: 0 18px 60px;
 }
 .disc-group {
   margin-top: 18px;
@@ -1699,9 +1648,6 @@ body {
 @media (max-width: 820px) {
   .disc-input {
     font-size: 16px;
-  }
-  .disc-body {
-    padding: 0 14px 60px;
   }
   .disc-card-head {
     flex-direction: column;
@@ -2121,5 +2067,156 @@ h4 .np-story-link:hover {
   .app.paper-reading .reader-back {
     margin: 0;
     width: 100%;
+  }
+}
+
+/* Discover: search history beside the open search's results */
+.disc-layout {
+  display: grid;
+  grid-template-columns: 270px minmax(0, 1fr);
+  gap: 28px;
+  max-width: 1040px;
+  margin: 0 auto;
+  padding: 18px 24px 60px;
+}
+.disc-searches {
+  position: sticky;
+  top: 12px;
+  align-self: start;
+  max-height: calc(100vh - 24px);
+  overflow-y: auto;
+}
+.disc-searches-title {
+  margin: 0 0 8px;
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+.disc-runs {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.disc-run {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  width: 100%;
+  padding: 9px 10px;
+  border: none;
+  border-radius: 7px;
+  background: none;
+  font: inherit;
+  text-align: left;
+  color: inherit;
+  cursor: pointer;
+}
+.disc-run:hover {
+  background: rgba(0, 0, 0, 0.04);
+}
+.disc-run.active {
+  background: var(--accent-soft);
+}
+.disc-run-main {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+.disc-run-label {
+  font-weight: 600;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.disc-run-outcome {
+  font-size: 12px;
+  color: var(--ink-faint);
+}
+.disc-run--failed .disc-run-outcome {
+  color: #a23b2f;
+}
+.disc-results {
+  min-width: 0;
+}
+.disc-results .disc-group:first-of-type {
+  margin-top: 8px;
+}
+.disc-back {
+  display: none;
+}
+.disc-results-head {
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--line);
+}
+.disc-results-title {
+  margin: 0;
+  font-family: var(--serif);
+  font-size: 21px;
+  font-weight: 600;
+}
+.disc-results-meta {
+  margin: 3px 0 10px;
+  font-size: 12.5px;
+  color: var(--ink-soft);
+}
+.disc-filter-seg {
+  margin-top: 2px;
+}
+.disc-badge {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--research);
+  padding: 5px 2px;
+}
+.disc-badge--muted {
+  color: var(--ink-faint);
+  font-weight: 500;
+}
+.disc-card--dismissed .disc-name,
+.disc-card--dismissed .disc-desc,
+.disc-card--dismissed .disc-reason {
+  color: var(--ink-faint);
+}
+.disc .empty-state {
+  padding: 28px 12px;
+}
+@media (max-width: 820px) {
+  /* Phones: the list of searches, or one search's results — not both. */
+  .disc-layout {
+    display: block;
+    padding: 12px 16px 48px;
+  }
+  .disc-searches {
+    position: static;
+    max-height: none;
+  }
+  .disc-results {
+    display: none;
+  }
+  .disc--results-open .disc-searches {
+    display: none;
+  }
+  .disc--results-open .disc-results {
+    display: block;
+  }
+  .disc-back {
+    display: inline-block;
+    margin-bottom: 10px;
+    padding: 4px 0;
+    border: none;
+    background: none;
+    font: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--accent);
+    cursor: pointer;
+  }
+  .disc-run {
+    padding: 12px 10px;
   }
 }

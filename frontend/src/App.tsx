@@ -656,31 +656,40 @@ export default function App() {
     setDiscover((prev) => (prev ? { ...prev, run, runs: [run, ...prev.runs] } : prev));
   }, []);
 
-  const dropSuggestion = useCallback((id: number) => {
-    setDiscover((prev) => (prev ? { ...prev, suggestions: prev.suggestions.filter((x) => x.id !== id) } : prev));
-  }, []);
+  const onLoadDiscoverRun = useCallback((id: number) => api.discoverRun(id), []);
 
   const onFollowSuggestion = useCallback(
     async (s: Suggestion) => {
       const res = await api.followSuggestion(s.id);
-      dropSuggestion(s.id);
       if (s.kind === "blog") {
-        await loadFeeds();
+        loadFeeds();
         setDiscoverNotice(res.duplicate ? `You already follow ${s.name}.` : `Subscribed to ${s.name}.`);
       } else {
-        await loadXAccounts();
+        loadXAccounts();
         setDiscoverNotice(res.duplicate ? `You already follow ${s.name}.` : `Following ${s.name}.`);
       }
+      loadDiscover(); // refresh the per-search counts
+      return res.suggestion;
     },
-    [dropSuggestion, loadFeeds, loadXAccounts]
+    [loadFeeds, loadXAccounts, loadDiscover]
   );
 
   const onDismissSuggestion = useCallback(
     async (s: Suggestion) => {
-      await api.dismissSuggestion(s.id);
-      dropSuggestion(s.id);
+      const { suggestion } = await api.dismissSuggestion(s.id);
+      loadDiscover();
+      return suggestion;
     },
-    [dropSuggestion]
+    [loadDiscover]
+  );
+
+  const onRestoreSuggestion = useCallback(
+    async (s: Suggestion) => {
+      const { suggestion } = await api.restoreSuggestion(s.id);
+      loadDiscover();
+      return suggestion;
+    },
+    [loadDiscover]
   );
 
   const onGroupingChange = useCallback((g: Grouping) => {
@@ -828,7 +837,7 @@ export default function App() {
         onSelectDiscover={onSelectDiscover}
         onSelectNewspaper={onSelectNewspaper}
         newspaperPrinting={paperRunning}
-        discoverCount={discover?.suggestions.length ?? 0}
+        discoverCount={discover?.to_review ?? 0}
         discoverRunning={discoverRunning}
       />
       {view === "newspaper" && !lensActive ? (
@@ -847,8 +856,10 @@ export default function App() {
           state={discover}
           notice={discoverNotice}
           onStart={onStartDiscover}
+          onLoadRun={onLoadDiscoverRun}
           onFollow={onFollowSuggestion}
           onDismiss={onDismissSuggestion}
+          onRestore={onRestoreSuggestion}
           onBackToNav={onBackToNav}
         />
       ) : view === "x" && !lensActive ? (

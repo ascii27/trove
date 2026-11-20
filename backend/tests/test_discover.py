@@ -249,8 +249,12 @@ def test_discover_flow_follow_and_dismiss(client, sync_discover, monkeypatch):
 
     state = client.get("/api/discover").json()
     assert state["run"]["status"] == "done"
-    assert [r["id"] for r in state["runs"]] == [state["run"]["id"]]
-    blog, person = state["suggestions"]
+    rid = state["run"]["id"]
+    (run,) = state["runs"]
+    assert (run["id"], run["to_review"], run["total"]) == (rid, 2, 2)
+    assert state["to_review"] == 2
+    results = lambda: client.get(f"/api/discover/runs/{rid}").json()["suggestions"]  # noqa: E731
+    blog, person = results()
     assert blog["topics"] == ["wine"] and person["handle"] == "jancisrobinson"
     assert state["x_configured"] is False
 
@@ -263,15 +267,22 @@ def test_discover_flow_follow_and_dismiss(client, sync_discover, monkeypatch):
     # X isn't configured: following fails clearly and the suggestion stays.
     res = client.post(f"/api/discover/suggestions/{person['id']}/follow")
     assert res.status_code == 422 and "X isn't connected" in res.json()["detail"]
-    assert [s["id"] for s in client.get("/api/discover").json()["suggestions"]] == [person["id"]]
+    assert client.get("/api/discover").json()["to_review"] == 1
 
     assert client.post(f"/api/discover/suggestions/{person['id']}/dismiss").status_code == 200
-    assert client.get("/api/discover").json()["suggestions"] == []
+    # The search keeps its results, each with what you did about it.
+    assert [(s["name"], s["status"]) for s in results()] == [("Wine Folly", "followed"), ("Jancis Robinson", "dismissed")]
+    assert client.get("/api/discover").json()["runs"][0]["to_review"] == 0
+
+    # "Not for me" can be undone.
+    assert client.post(f"/api/discover/suggestions/{person['id']}/restore").json()["suggestion"]["status"] == "new"
+    assert client.get("/api/discover").json()["to_review"] == 1
+    assert client.get("/api/discover/runs/9999").status_code == 404
 
 
 def test_follow_x_suggestion(client, sync_discover, monkeypatch):
-    client.post("/api/discover", json={"context": "wine", "kinds": "x"})
-    (person,) = client.get("/api/discover").json()["suggestions"]
+    rid = client.post("/api/discover", json={"context": "wine", "kinds": "x"}).json()["run"]["id"]
+    (person,) = client.get(f"/api/discover/runs/{rid}").json()["suggestions"]
 
     class Src:
         mode = "api"
@@ -296,10 +307,25 @@ def test_discover_rejects_concurrent_runs(client, monkeypatch):
 
 
 def test_hand_followed_suggestions_leave_the_list(client, sync_discover, monkeypatch):
-    client.post("/api/discover", json={"context": "wine", "kinds": "blogs"})
+    rid = client.post("/api/discover", json={"context": "wine", "kinds": "blogs"}).json()["run"]["id"]
     monkeypatch.setattr(feedfetch, "resolve_feed", lambda url, **kw: ("https://winefolly.com/feed", _parsed()))
     client.post("/api/feeds", json={"url": "https://winefolly.com"})
-    assert client.get("/api/discover").json()["suggestions"] == []
+    assert client.get("/api/discover").json()["to_review"] == 0
+    (s,) = client.get(f"/api/discover/runs/{rid}").json()["suggestions"]
+    assert s["status"] == "followed"
+
+
+def test_history_keeps_the_last_25_searches(conn):
+    first = discoverstore.create_run(conn, "first", "all")
+    discoverstore.add_suggestion(conn, first, kind="x", key="old", name="Old", handle="old")
+    for i in range(25):
+        discoverstore.create_run(conn, f"search {i}", "all")
+    runs = discoverstore.list_runs(conn)
+    assert len(runs) == 25 and runs[0]["context"] == "search 24"
+    assert discoverstore.get_run(conn, first) is None
+    # The pruned search's suggestion still blocks a repeat.
+    newest = runs[0]["id"]
+    assert not discoverstore.add_suggestion(conn, newest, kind="x", key="old", name="Old", handle="old")
 
 
 def test_bad_kinds(client):

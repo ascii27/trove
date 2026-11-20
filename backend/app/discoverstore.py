@@ -18,6 +18,12 @@ _SUGGESTION_COLS = (
     "id, run_id, kind, name, url, feed_url, handle, description, reason, topics, status, created_at"
 )
 KINDS = ("all", "blogs", "x")
+KEEP_RUNS = 25  # search history length; older runs are pruned (their suggestions still dedupe)
+# Per-run tallies of its suggestions, for the history list.
+_RUN_COUNTS = (
+    ", (SELECT COUNT(*) FROM suggestions s WHERE s.run_id = discovery_runs.id AND s.status = 'new') AS to_review"
+    ", (SELECT COUNT(*) FROM suggestions s WHERE s.run_id = discovery_runs.id) AS total"
+)
 
 
 # --------------------------------------------------------------- profile ----
@@ -116,11 +122,18 @@ def known_suggestions(conn: sqlite3.Connection, limit: int = 80) -> list[str]:
 # ------------------------------------------------------------------ runs ----
 def create_run(conn: sqlite3.Connection, context: str | None, kinds: str) -> int:
     cur = conn.execute("INSERT INTO discovery_runs (context, kinds) VALUES (?, ?)", (context, kinds))
-    return int(cur.lastrowid)
+    run_id = int(cur.lastrowid)
+    # Keep the last KEEP_RUNS searches. Suggestions outlive their run (run_id → NULL) so
+    # anything ever suggested still isn't suggested again.
+    conn.execute(
+        "DELETE FROM discovery_runs WHERE id NOT IN (SELECT id FROM discovery_runs ORDER BY id DESC LIMIT ?)",
+        (KEEP_RUNS,),
+    )
+    return run_id
 
 
 def get_run(conn: sqlite3.Connection, run_id: int) -> dict | None:
-    row = conn.execute(f"SELECT {_RUN_COLS} FROM discovery_runs WHERE id = ?", (run_id,)).fetchone()
+    row = conn.execute(f"SELECT {_RUN_COLS}{_RUN_COUNTS} FROM discovery_runs WHERE id = ?", (run_id,)).fetchone()
     return dict(row) if row else None
 
 
@@ -155,8 +168,27 @@ def finish_run(
     )
 
 
-def list_runs(conn: sqlite3.Connection, limit: int = 10) -> list[dict]:
-    return [dict(r) for r in conn.execute(f"SELECT {_RUN_COLS} FROM discovery_runs ORDER BY id DESC LIMIT ?", (limit,))]
+def list_runs(conn: sqlite3.Connection, limit: int = KEEP_RUNS) -> list[dict]:
+    return [
+        dict(r)
+        for r in conn.execute(
+            f"SELECT {_RUN_COLS}{_RUN_COUNTS} FROM discovery_runs ORDER BY id DESC LIMIT ?", (limit,)
+        )
+    ]
+
+
+def run_suggestions(conn: sqlite3.Connection, run_id: int) -> list[dict]:
+    """Everything a search found, whatever you've since done with it, in the model's order."""
+    return [
+        _suggestion_dict(r)
+        for r in conn.execute(f"SELECT {_SUGGESTION_COLS} FROM suggestions WHERE run_id = ? ORDER BY id", (run_id,))
+    ]
+
+
+def to_review_total(conn: sqlite3.Connection) -> int:
+    return conn.execute(
+        "SELECT COUNT(*) AS n FROM suggestions s JOIN discovery_runs r ON r.id = s.run_id WHERE s.status = 'new'"
+    ).fetchone()["n"]
 
 
 def fail_interrupted_runs(conn: sqlite3.Connection) -> int:

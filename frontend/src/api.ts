@@ -149,6 +149,9 @@ export const api = {
       `/api/discover/suggestions/${id}/follow`,
       { method: "POST" }
     ),
+  discoverRun: (id: number) => req<{ run: DiscoverRun; suggestions: Suggestion[] }>(`/api/discover/runs/${id}`),
+  restoreSuggestion: (id: number) =>
+    req<{ suggestion: Suggestion }>(`/api/discover/suggestions/${id}/restore`, { method: "POST" }),
   dismissSuggestion: (id: number) =>
     req<{ suggestion: Suggestion }>(`/api/discover/suggestions/${id}/dismiss`, { method: "POST" }),
 
