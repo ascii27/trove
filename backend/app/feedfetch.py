@@ -32,6 +32,7 @@ class Entry:
     summary: str | None
     published: str | None  # human-readable (as published in the feed)
     published_at: str | None = None  # sortable ISO 8601, for newest-first ordering
+    image: str | None = None  # media:thumbnail / media:content / image enclosure / first <img>
 
 
 @dataclass
@@ -52,6 +53,27 @@ def _text(html_fragment: str | None) -> str | None:
         txt = html_fragment
     txt = " ".join(txt.split())
     return txt or None
+
+
+def _entry_image(e, summary_html: str | None) -> str | None:
+    """The entry's picture, if the feed carries one. Pure; best effort."""
+    for key in ("media_thumbnail", "media_content"):
+        for m in e.get(key) or []:
+            u = m.get("url")
+            if u and (key == "media_thumbnail" or (m.get("medium") or m.get("type") or "image").startswith("image")):
+                return u
+    for enc in e.get("enclosures") or []:
+        if (enc.get("type") or "").startswith("image") and enc.get("href"):
+            return enc["href"]
+    if summary_html and "<img" in summary_html:
+        try:
+            srcs = lxml_html.fromstring(f"<div>{summary_html}</div>").xpath("//img/@src")
+        except Exception:  # noqa: BLE001
+            srcs = []
+        for src in srcs:
+            if src.startswith("http") and not src.endswith((".gif", ".svg")):
+                return src
+    return None
 
 
 def parse_feed(content: str | bytes, url: str) -> ParsedFeed | None:
@@ -76,6 +98,7 @@ def parse_feed(content: str | bytes, url: str) -> ParsedFeed | None:
                 summary=_text(summary),
                 published=e.get("published") or e.get("updated"),
                 published_at=time.strftime("%Y-%m-%dT%H:%M:%S", parsed_date) if parsed_date else None,
+                image=_entry_image(e, summary),
             )
         )
     return ParsedFeed(title=d.feed.get("title"), site_url=d.feed.get("link"), entries=entries)

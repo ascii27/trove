@@ -5,7 +5,7 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from . import db, discover, discoverstore, feedfetch, store, xsource, xstore
+from . import db, discover, discoverstore, feedfetch, newspaper, paperstore, store, xsource, xstore
 from .worker import poll_x_account
 from .urls import canonicalize
 
@@ -52,6 +52,12 @@ class XReadBody(BaseModel):
 
 class XThemeBody(BaseModel):
     theme: str | None = None
+
+
+class PaperSettingsBody(BaseModel):
+    schedule: str  # off|daily|weekdays|weekends
+    hour: int = 6
+    tz: str = "UTC"
 
 
 class DiscoverBody(BaseModel):
@@ -455,3 +461,64 @@ def dismiss_suggestion(sid: int) -> dict:
         if not discoverstore.set_status(conn, sid, "dismissed"):
             raise HTTPException(status_code=404, detail="Suggestion not found.")
         return {"suggestion": discoverstore.get_suggestion(conn, sid)}
+
+
+# ------------------------------------------------------------- newspaper ----
+def _paper_state(conn) -> dict:
+    return {
+        "editions": paperstore.list_editions(conn),
+        "running": paperstore.running_edition(conn),
+        "latest_id": paperstore.latest_done(conn),
+        "settings": paperstore.get_settings(conn),
+    }
+
+
+@router.get("/newspaper")
+def get_newspaper() -> dict:
+    with db.cursor() as conn:
+        return _paper_state(conn)
+
+
+@router.post("/newspaper", status_code=202)
+def print_edition() -> dict:
+    with db.cursor() as conn:
+        if paperstore.running_edition(conn) is not None:
+            raise HTTPException(status_code=409, detail="An edition is already being printed. It'll be ready shortly.")
+        eid = newspaper.start(conn, "manual")
+        conn.commit()
+        state = _paper_state(conn)
+    newspaper.launch(eid)
+    return state
+
+
+@router.get("/newspaper/editions/{eid}")
+def get_edition(eid: int) -> dict:
+    with db.cursor() as conn:
+        ed = paperstore.get_edition(conn, eid)
+        if ed is None or ed["status"] == "deleted":
+            raise HTTPException(status_code=404, detail="Edition not found.")
+        return {"edition": ed}
+
+
+@router.put("/newspaper/settings")
+def save_paper_settings(body: PaperSettingsBody) -> dict:
+    from zoneinfo import ZoneInfo
+
+    if body.schedule not in paperstore.SCHEDULES:
+        raise HTTPException(status_code=422, detail="schedule must be off, daily, weekdays or weekends.")
+    if not 0 <= body.hour <= 23:
+        raise HTTPException(status_code=422, detail="hour must be between 0 and 23.")
+    try:
+        ZoneInfo(body.tz)
+    except Exception:  # noqa: BLE001
+        raise HTTPException(status_code=422, detail="That time zone isn't recognised.")
+    from datetime import datetime, timezone
+
+    with db.cursor() as conn:
+        settings = paperstore.save_settings(conn, body.schedule, body.hour, body.tz)
+        # Turning a schedule on after today's print time starts it tomorrow, not right now.
+        today = newspaper.due(settings, datetime.now(timezone.utc))
+        if today is not None:
+            paperstore.mark_scheduled(conn, today)
+            settings = paperstore.get_settings(conn)
+        return {"settings": settings}

@@ -175,3 +175,59 @@ export interface DiscoverState {
   profile: { topics: string[]; feed_count: number; x_count: number; collections: string[] };
   x_configured: boolean;
 }
+
+/** One story as printed in an edition (a self-contained snapshot). */
+export interface PaperStory {
+  item_id: number;
+  lane: "feed" | "x" | "saved";
+  headline: string;
+  summary: string;
+  original_title: string | null;
+  source: string | null;
+  author: string | null;
+  url: string;
+  image: string | null;
+  published_at: string | null;
+  text?: string; // X posts: the post itself
+}
+
+export interface PaperLayout {
+  editors_note: string;
+  lead: PaperStory | null;
+  sections: { name: string; stories: PaperStory[] }[];
+  from_x: PaperStory[];
+  from_shelf: PaperStory[];
+  source_count: number;
+}
+
+export interface EditionSummary {
+  id: number;
+  number: number | null;
+  status: "running" | "done" | "failed";
+  trigger: "manual" | "schedule";
+  error: string | null;
+  window_start: string;
+  story_count: number | null;
+  created_at: string; // UTC "YYYY-MM-DD HH:MM:SS"
+  finished_at: string | null;
+}
+
+export interface Edition extends EditionSummary {
+  layout: PaperLayout | null;
+}
+
+export type PaperSchedule = "off" | "daily" | "weekdays" | "weekends";
+
+export interface PaperSettings {
+  schedule: PaperSchedule;
+  hour: number;
+  tz: string;
+  last_scheduled: string | null;
+}
+
+export interface PaperState {
+  editions: EditionSummary[]; // newest first
+  running: EditionSummary | null;
+  latest_id: number | null;
+  settings: PaperSettings;
+}

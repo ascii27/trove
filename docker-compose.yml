@@ -14,6 +14,7 @@ services:
       - TROVE_X_RSS_TEMPLATE=${TROVE_X_RSS_TEMPLATE:-}
       - TROVE_DISCOVER_MODEL=${TROVE_DISCOVER_MODEL:-claude-haiku-5-5}
       - TROVE_DISCOVER_EFFORT=${TROVE_DISCOVER_EFFORT:-low}
+      - TROVE_PAPER_MODEL=${TROVE_PAPER_MODEL:-claude-haiku-5-5}
     restart: unless-stopped
 
 volumes:
